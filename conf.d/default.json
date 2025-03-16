@@ -1,0 +1,13 @@
+{
+    "user": "tunnel_user",
+    "ip": "142.16.102.35",
+    "ssh_port": 22,
+    "ssh_key": "/path/to/key",
+    "options": {"keepalive_interval": 10},
+    "bandwidth": {"up": 1000, "down": 5000},
+    "tunnels": [
+        {"type":"-L", "name": "printer1", "listen_port": 9101, "endpoint_host": "JectDirect", "endpoint_port": 9100},
+        {"type":"-R", "name": "cam1", "listen_host": "cam", "listen_port": 5003, "endpoint_host": "127.0.0.1", "endpoint_port": 5000},
+        {"type":"-D", "name": "remote_lan1", "listen_port": 4443}
+    ]
+}

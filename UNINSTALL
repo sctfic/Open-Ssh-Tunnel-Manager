@@ -1,0 +1,36 @@
+#!/bin/bash
+
+# Vérification des privilèges root
+if [ "$EUID" -ne 0 ]; then
+    echo "Erreur : Ce script doit être exécuté en tant que root (utilisez sudo)"
+    exit 1
+fi
+
+# Arrêt et désactivation du service
+echo "Arrêt du service sshtunnel-manager..."
+systemctl stop sshtunnel-manager.service 2>/dev/null || true
+systemctl disable sshtunnel-manager.service 2>/dev/null || true
+
+# Suppression des fichiers installés
+echo "Suppression des fichiers..."
+rm -f /usr/local/bin/sshtunnel-manager
+rm -f /etc/systemd/system/sshtunnel-manager.service
+rm -f /etc/bash_completion.d/sshtunnel-manager
+
+# Nettoyage des répertoires (uniquement s’ils sont vides ou contiennent des fichiers créés par ce projet)
+echo "Nettoyage des répertoires..."
+rm -rf /etc/sshtunnel
+rm -rf /var/log/sshtunnel
+rm -rf /var/run/sshtunnel
+
+# Ne supprime pas /root/.ssh ni les clés SSH pour éviter de supprimer des données utilisateur non liées
+echo "Note : Les clés SSH dans /root/.ssh/ ne sont pas supprimées pour éviter une perte accidentelle de données."
+
+# Rechargement de systemd pour refléter les changements
+echo "Mise à jour de systemd..."
+systemctl daemon-reload
+
+echo "============= Désinstallation terminée avec succès ! ============="
+echo "Les dépendances (jq, trickle, etc.) n'ont pas été supprimées car elles peuvent être utilisées par d'autres programmes."
+echo "Pour les supprimer manuellement si nécessaire :"
+echo "  sudo apt remove jq trickle inotify-tools autossh sshpass netcat-openbsd curl"

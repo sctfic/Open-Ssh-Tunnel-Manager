@@ -1,0 +1,626 @@
+#!/bin/bash
+#
+# Gestionnaire de Tunnels SSH Avancé
+# Version: 1.0
+# Auteur: Alban Lopez
+#
+# Description: Service pour la gestion automatisée de tunnels SSH persistants
+#              avec contrôle de bande passante
+
+# Constantes
+CONFIG_DIR="/etc/sshtunnel/conf.d"
+LOG_DIR="/var/log/sshtunnel"
+PID_DIR="/var/run/sshtunnel"
+SCRIPT_NAME=$(basename $0)
+RELOAD_PID="${PID_DIR}/reload.pid"
+
+
+# Couleurs pour la sortie
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Vérification des dépendances
+check_dependencies() {
+    local deps=("trickle" "autossh" "sshpass" "jq" "inotifywait" "nc" "curl" "ping")
+    local missing=()
+
+    for dep in "${deps[@]}"; do
+        if ! command -v "$dep" &> /dev/null; then
+            missing+=("$dep")
+        fi
+    done
+
+    if [ ${#missing[@]} -ne 0 ]; then
+        echo -e "${RED}[ERREUR] Dépendances manquantes : ${missing[*]}${NC}"
+        echo "Pour installer ces dépendances, utilisez:"
+        echo "sudo apt-get install jq trickle inotify-tools sshpass netcat curl"
+        exit 1
+    fi
+}
+
+# Vérification des droits d'administration
+check_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        echo -e "${RED}[ERREUR] Ce script doit être exécuté avec les droits d'administration (sudo)${NC}"
+        exit 1
+    fi
+}
+
+# Vérification des répertoires nécessaires
+check_dirs() {
+    for dir in "$CONFIG_DIR" "$LOG_DIR" "$PID_DIR"; do
+        if [ ! -d "$dir" ]; then
+            mkdir -p "$dir"
+            chmod 750 "$dir"
+        fi
+    done
+}
+
+# Validation d'un fichier de configuration
+validate_config() {
+    local config="$1"
+    if [ ! -f "$config" ]; then
+        echo -e "${RED}[ERREUR] Fichier de configuration non trouvé: $config${NC}"
+        return 1
+    fi
+    
+    # Vérification syntaxe JSON
+    if ! jq empty "$config" 2>/dev/null; then
+        echo -e "${RED}[ERREUR] Fichier de configuration invalide (JSON incorrect): $config${NC}"
+        return 1
+    fi
+    
+    # Vérification des champs obligatoires
+    local required_fields=("user" "ip" "ssh_port" "tunnels")
+    for field in "${required_fields[@]}"; do
+        if [ "$(jq "has(\"$field\")" "$config")" != "true" ]; then
+            echo -e "${RED}[ERREUR] Champ obligatoire manquant dans la configuration: $field${NC}"
+            return 1
+        fi
+    done
+    
+    return 0
+}
+
+# Démarrage d'un tunnel SSH
+start_tunnel() {
+    local config="$1"
+    local config_name=$(basename "$config" .json)
+    local log_file="$LOG_DIR/$config_name.log"
+    local pid_file="$PID_DIR/$config_name.pid"
+    
+    # Vérification si le tunnel est déjà actif
+    if [ -f "$pid_file" ] && kill -0 $(cat "$pid_file") 2>/dev/null; then
+        echo -e "${YELLOW}[INFO] Tunnel déjà actif pour $config_name (PID: $(cat $pid_file))${NC}"
+        return 0
+    fi
+
+    echo -e "${BLUE}[INFO] Démarrage du tunnel $config_name${NC}"
+    
+    # Extraction des paramètres
+    local user=$(jq -r '.user' "$config")
+    local ip=$(jq -r '.ip' "$config")
+    local ssh_port=$(jq -r '.ssh_port' "$config")
+    local ssh_key=$(jq -r '.ssh_key // ""' "$config")
+    local keepalive=$(jq -r '.options.keepalive_interval // 10' "$config")
+    local bw_up=$(jq -r '.bandwidth.up // 0' "$config")
+    local bw_down=$(jq -r '.bandwidth.down // 0' "$config")
+
+    # Construction de la commande de base
+    local base_cmd="autossh -M 0 -N -4 -o ServerAliveInterval=$keepalive -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=no"
+
+    # Ajout de la clé SSH si spécifiée
+    if [ -n "$ssh_key" ] && [ -f "$ssh_key" ]; then
+        base_cmd+=" -i $ssh_key"
+        chmod 600 "$ssh_key" # Sécurité renforcée
+    fi
+
+    # Ajout des tunnels depuis la configuration
+    jq -c '.tunnels[]' "$config" | while read tunnel; do
+        type=$(jq -r '.type' <<< "$tunnel")
+        case $type in
+            "-L")
+                base_cmd+=" -L $(jq -r '.listen_port+":"+.endpoint_host+":"+.endpoint_port' <<< "$tunnel")"
+                ;;
+            "-R")
+                listen_host=$(jq -r '.listen_host // ""' <<< "$tunnel")
+                if [ -n "$listen_host" ]; then
+                    base_cmd+=" -R ${listen_host}:$(jq -r '.listen_port+":"+.endpoint_host+":"+.endpoint_port' <<< "$tunnel")"
+                else
+                    base_cmd+=" -R $(jq -r '.listen_port+":"+.endpoint_host+":"+.endpoint_port' <<< "$tunnel")"
+                fi
+                ;;
+            "-D")
+                base_cmd+=" -D $(jq -r '.listen_port' <<< "$tunnel")"
+                ;;
+        esac
+    done
+
+    # Finalisation de la commande
+    base_cmd+=" -p $ssh_port $user@$ip"
+
+    # Application du shaping avec trickle si besoin
+    if [ $bw_up -gt 0 ] || [ $bw_down -gt 0 ]; then
+        base_cmd="trickle -u $bw_up -d $bw_down $base_cmd"
+    fi
+
+    # Démarrage avec gestion des logs et PID
+    echo "[$(date +"%Y-%m-%d %T")] Démarrage tunnel: $base_cmd" >> "$log_file"
+    eval "$base_cmd" >> "$log_file" 2>&1 &
+    local pid=$!
+    
+    # Validation du démarrage
+    sleep 1
+    if kill -0 $pid 2>/dev/null; then
+        echo $pid > "$pid_file"
+        echo -e "${GREEN}[SUCCESS] Tunnel $config_name démarré (PID: $pid)${NC}"
+        return 0
+    else
+        echo -e "${RED}[ERREUR] Échec du démarrage - vérifier $log_file${NC}"
+        rm -f "$pid_file"
+        return 1
+    fi
+}
+
+# Arrêt d'un tunnel SSH
+stop_tunnel() {
+    local config="$1"
+    local config_name=$(basename "$config" .json)
+    local pid_file="$PID_DIR/$config_name.pid"
+    
+    if [ ! -f "$pid_file" ]; then
+        echo -e "${YELLOW}[INFO] Aucun tunnel en cours d'exécution pour $config_name${NC}"
+        return 0
+    fi
+    
+    local pid=$(cat "$pid_file")
+    if ! kill -0 "$pid" 2>/dev/null; then
+        echo -e "${YELLOW}[INFO] Processus PID $pid introuvable pour $config_name${NC}"
+        rm -f "$pid_file"
+        return 0
+    fi
+    
+    echo -e "${BLUE}[INFO] Arrêt du tunnel pour $config_name (PID: $pid)${NC}"
+    
+    # Kill du processus principal et des processus enfants
+    pkill -P "$pid"
+    kill "$pid"
+    
+    # Vérification de l'arrêt
+    sleep 2
+    if kill -0 "$pid" 2>/dev/null; then
+        echo -e "${YELLOW}[WARNING] Forçage de l'arrêt du tunnel pour $config_name${NC}"
+        kill -9 "$pid"
+    fi
+    
+    rm -f "$pid_file"
+    echo -e "${GREEN}[SUCCESS] Tunnel arrêté pour $config_name${NC}"
+}
+
+# Redémarrage d'un tunnel SSH
+restart_tunnel() {
+    local config="$1"
+    stop_tunnel "$config"
+    sleep 1
+    start_tunnel "$config"
+}
+
+# Fonction pour ajouter un tunnel à une configuration existante
+add_tunnel() {
+    local config="$1"
+    local tunnel_type="$2"
+    local tunnel_name="$3"
+    local params=("${@:4}")
+    
+    if ! validate_config "$config"; then
+        return 1
+    fi
+    
+    local tunnel_json=""
+    
+    case "$tunnel_type" in
+        "-L")
+            if [ ${#params[@]} -ne 3 ]; then
+                echo -e "${RED}[ERREUR] Format incorrect. Utilisez: add-tunnel config -L nom port_local hote_distant port_distant${NC}"
+                return 1
+            fi
+            tunnel_json="{\"type\":\"-L\",\"name\":\"$tunnel_name\",\"listen_port\":${params[0]},\"endpoint_host\":\"${params[1]}\",\"endpoint_port\":${params[2]}}"
+            ;;
+        "-R")
+            if [ ${#params[@]} -eq 3 ]; then
+                tunnel_json="{\"type\":\"-R\",\"name\":\"$tunnel_name\",\"listen_port\":${params[0]},\"endpoint_host\":\"${params[1]}\",\"endpoint_port\":${params[2]}}"
+            elif [ ${#params[@]} -eq 4 ]; then
+                tunnel_json="{\"type\":\"-R\",\"name\":\"$tunnel_name\",\"listen_host\":\"${params[0]}\",\"listen_port\":${params[1]},\"endpoint_host\":\"${params[2]}\",\"endpoint_port\":${params[3]}}"
+            else
+                echo -e "${RED}[ERREUR] Format incorrect. Utilisez: add-tunnel config -R nom port_distant hote_local port_local${NC}"
+                echo -e "${RED}Ou: add-tunnel config -R nom hote_distant port_distant hote_local port_local${NC}"
+                return 1
+            fi
+            ;;
+        "-D")
+            if [ ${#params[@]} -ne 1 ]; then
+                echo -e "${RED}[ERREUR] Format incorrect. Utilisez: add-tunnel config -D nom port_local${NC}"
+                return 1
+            fi
+            tunnel_json="{\"type\":\"-D\",\"name\":\"$tunnel_name\",\"listen_port\":${params[0]}}"
+            ;;
+        *)
+            echo -e "${RED}[ERREUR] Type de tunnel non reconnu. Utilisez -L, -R ou -D${NC}"
+            return 1
+            ;;
+    esac
+    
+    # Ajout du tunnel à la configuration
+    local temp_file=$(mktemp)
+    jq ".tunnels += [$tunnel_json]" "$config" > "$temp_file"
+    mv "$temp_file" "$config"
+    
+    echo -e "${GREEN}[SUCCESS] Tunnel $tunnel_name ajouté à $config${NC}"
+    return 0
+}
+
+# Fonction de pairing pour ajouter un nouveau site
+pairing() {
+    local ip="$1"
+    local user="$2"
+    local password="$3"
+    local config_name="$4"
+    local bandwidth="$5"
+    
+    echo -e "${BLUE}[INFO] Démarrage du processus de pairing pour $config_name ($ip)${NC}"
+    
+    # Vérification de la connectivité
+    if ! ping -c 1 -W 2 "$ip" &>/dev/null; then
+        echo -e "${RED}[ERREUR] Impossible de joindre l'hôte $ip${NC}"
+        return 1
+    fi
+    
+    # Vérification du port SSH
+    if ! nc -z -w 2 "$ip" 22 &>/dev/null; then
+        echo -e "${RED}[ERREUR] Le port SSH (22) n'est pas accessible sur $ip${NC}"
+        return 1
+    fi
+    
+    # Génération d'une clé SSH Ed25519
+    local key_path="/root/.ssh/sshtunnel_${config_name}_ed25519"
+    if [ ! -f "$key_path" ]; then
+        echo -e "${BLUE}[INFO] Génération d'une nouvelle paire de clés SSH pour $config_name${NC}"
+        ssh-keygen -t ed25519 -f "$key_path" -N "" -C "sshtunnel-$config_name"
+        chmod 600 "$key_path"*
+    else
+        echo -e "${YELLOW}[INFO] Une clé SSH existe déjà pour $config_name, utilisation de celle-ci${NC}"
+    fi
+    
+    # Préparation de l'utilisateur sur le serveur distant
+    echo -e "${BLUE}[INFO] Configuration de l'utilisateur sur le serveur distant${NC}"
+
+    local remote_setup=$(cat <<EOF
+sudo useradd -m -s /bin/false tunnel_user || true
+sudo mkdir -p /home/tunnel_user/.ssh
+echo "$(cat ${key_path}.pub)" | sudo tee -a /home/tunnel_user/.ssh/authorized_keys
+sudo chmod 700 /home/tunnel_user/.ssh
+sudo chmod 600 /home/tunnel_user/.ssh/authorized_keys
+sudo chown -R tunnel_user:tunnel_user /home/tunnel_user/.ssh
+echo "Setup completed successfully"
+EOF
+)
+    
+    # Exécution du script distant avec sshpass
+    local setup_output
+    setup_output=$(sshpass -p "$password" ssh -o StrictHostKeyChecking=no "$user@$ip" "$remote_setup" 2>&1)
+    local ssh_status=$?
+    
+    if [ $ssh_status -ne 0 ] || ! echo "$setup_output" | grep -q "Setup completed successfully"; then
+        echo -e "${RED}[ERREUR] Échec de la configuration sur le serveur distant:${NC}"
+        echo "$setup_output"
+        return 1
+    fi
+    
+    # Création du fichier de configuration JSON
+    local bw_up=100
+    local bw_down=100
+    
+    if [ -n "$bandwidth" ]; then
+        bw_up=$(echo "$bandwidth" | cut -d'/' -f1)
+        bw_down=$(echo "$bandwidth" | cut -d'/' -f2)
+    fi
+    
+    local config_file="$CONFIG_DIR/${config_name}.json"
+    cat > "$config_file" <<EOF
+{
+  "user": "tunnel_user",
+  "ip": "$ip",
+  "ssh_port": 22,
+  "ssh_key": "$key_path",
+  "options": {"keepalive_interval": 10},
+  "bandwidth": {"up": $bw_up, "down": $bw_down},
+  "tunnels": []
+}
+EOF
+    
+    chmod 640 "$config_file"
+    
+    echo -e "${GREEN}[SUCCESS] Pairing réussi pour $config_name${NC}"
+    echo -e "Configuration créée: $config_file"
+    echo -e "Clé SSH: $key_path"
+    echo -e "Utilisez la commande 'sshtunnel-manager status $config_file' pour vérifier la connectivité"
+    
+    return 0
+}
+
+# Fonction pour supprimer un tunnel d'une configuration existante
+remove_tunnel() {
+    local config="$1"
+    local tunnel_name="$2"
+    
+    if ! validate_config "$config"; then
+        return 1
+    fi
+    
+    local tunnel_index=$(jq -r ".tunnels | map(.name) | index(\"$tunnel_name\")" "$config")
+    if [ "$tunnel_index" = "null" ]; then
+        echo -e "${RED}[ERREUR] Tunnel $tunnel_name introuvable dans la configuration${NC}"
+        return 1
+    fi
+    
+    # Suppression du tunnel de la configuration
+    local temp_file=$(mktemp)
+    jq "del(.tunnels[$tunnel_index])" "$config" > "$temp_file"
+    mv "$temp_file" "$config"
+    
+    echo -e "${GREEN}[SUCCESS] Tunnel $tunnel_name supprimé de $config${NC}"
+    return 0
+}
+
+# Vérification du statut des tunnels
+check_status() {
+    local config_name="$1"  # Paramètre optionnel : nom de la configuration (sans .json)
+    local config_dir="$CONFIG_DIR"
+    local json_output=""
+
+    # Mode global si aucun paramètre n'est fourni
+    if [ -z "$config_name" ]; then
+        json_output='{"servers": ['
+        local first_server=true
+
+        # Parcours de toutes les configurations
+        for config_file in "$config_dir"/*.json; do
+            [ ! -f "$config_file" ] && continue
+
+            local name=$(basename "$config_file" .json)
+            local ip=$(jq -r '.ip' "$config_file")
+            local ssh_port=$(jq -r '.ssh_port' "$config_file")
+
+            # Mesure du ping
+            local ping_ms=$(ping -c 2 -W 1 "$ip" | awk -F'/' '/rtt/ {print $5}' | cut -d'.' -f1 || echo "null")
+            
+            # Vérification du port SSH
+            local port_status="false"
+            local port_latency=0
+            local start_time=$(date +%s%N)
+            if nc -z -w 2 "$ip" "$ssh_port" 2>/dev/null; then
+                port_status="true"
+                port_latency=$(( ($(date +%s%N) - start_time) / 1000000 ))
+            fi
+
+            # Construction JSON
+            [ "$first_server" = "false" ] && json_output+=","
+            json_output+=$(jq -n \
+                --arg name "$name" \
+                --arg ip "$ip" \
+                --argjson ping "$ping_ms" \
+                --argjson port_status "$port_status" \
+                --argjson port_latency "$port_latency" \
+                '{
+                    name: $name,
+                    ip: $ip,
+                    ping_ms: $ping,
+                    port: {
+                        status: $port_status,
+                        latency_ms: $port_latency
+                    }
+                }')
+            first_server=false
+        done
+
+        json_output+=']}'
+
+    # Mode détaillé pour une configuration spécifique
+    else
+        local config_file="$config_dir/${config_name}.json"
+        if [ ! -f "$config_file" ]; then
+            echo '{"error": "Configuration non trouvée"}' | jq .
+            return 1
+        fi
+
+        # Extraction des paramètres de base
+        local name=$(basename "$config_file" .json)
+        local ip=$(jq -r '.ip' "$config_file")
+        local ssh_port=$(jq -r '.ssh_port' "$config_file")
+        local tunnels=$(jq -c '.tunnels[]' "$config_file")
+
+        # Mesures de base
+        local ping_ms=$(ping -c 2 -W 1 "$ip" | awk -F'/' '/rtt/ {print $5}' | cut -d'.' -f1 || echo "null")
+        local port_status="false"
+        local port_latency=0
+        local start_time=$(date +%s%N)
+        if nc -z -w 2 "$ip" "$ssh_port" 2>/dev/null; then
+            port_status="true"
+            port_latency=$(( ($(date +%s%N) - start_time) / 1000000 ))
+        fi
+
+        # Initialisation JSON
+        json_output='{"servers": [{'
+        json_output+="\"name\":\"$name\","
+        json_output+="\"ip\":\"$ip\","
+        json_output+="\"ping_ms\":$ping_ms,"
+        json_output+="\"port\":{\"status\":$port_status,\"latency_ms\":$port_latency}"
+
+        # Traitement des tunnels
+        if [ -n "$tunnels" ]; then
+            json_output+=',"tunnels": ['
+            local first_tunnel=true
+
+            while IFS= read -r tunnel; do
+                local type=$(jq -r '.type' <<< "$tunnel")
+                local tname=$(jq -r '.name' <<< "$tunnel")
+                local lport=$(jq -r '.listen_port' <<< "$tunnel")
+                local ehost=$(jq -r '.endpoint_host // ""' <<< "$tunnel")
+                local eport=$(jq -r '.endpoint_port // ""' <<< "$tunnel")
+                local lhost=$(jq -r '.listen_host // ""' <<< "$tunnel")
+
+                # Formatage de base du tunnel
+                [ "$first_tunnel" = "false" ] && json_output+=","
+                json_output+="{\"name\":\"$tname\",\"type\":\"$type\","
+
+                # Vérification du port local
+                local listen_status="false"
+                if netstat -tln | grep -q ":$lport "; then
+                    listen_status="true"
+                fi
+                json_output+="\"listen_port\":{\"status\":$listen_status},"
+
+                # Traitement spécifique au type de tunnel
+                case "$type" in
+                    "-L")
+                        # Vérification endpoint distant via le tunnel
+                        local endpoint_status="false"
+                        if timeout 1 bash -c "cat < /dev/null > /dev/tcp/localhost/$lport" 2>/dev/null; then
+                            endpoint_status="true"
+                        fi
+                        json_output+="\"endpoint\":{\"host\":\"$ehost\",\"port\":$eport,\"status\":$endpoint_status}"
+                        ;;
+                    "-R")
+                        # Vérification endpoint local
+                        local endpoint_status="false"
+                        if [ -n "$eport" ] && nc -z -w 1 "$ehost" "$eport" 2>/dev/null; then
+                            endpoint_status="true"
+                        fi
+                        json_output+="\"endpoint\":{\"host\":\"$ehost\",\"port\":$eport,\"status\":$endpoint_status}"
+                        
+                        # Vérification listen_host si spécifié
+                        if [ -n "$lhost" ]; then
+                            local lhost_status="false"
+                            if ping -c 1 -W 1 "$lhost" &>/dev/null; then
+                                lhost_status="true"
+                            fi
+                            json_output+=",\"listen_host\":{\"host\":\"$lhost\",\"status\":$lhost_status}"
+                        fi
+                        ;;
+                    "-D")
+                        # Aucun endpoint supplémentaire pour les tunnels SOCKS
+                        json_output+="\"endpoint\":{}"
+                        ;;
+                esac
+
+                json_output+="}"
+                first_tunnel=false
+            done <<< "$tunnels"
+
+            json_output+=']'
+        fi
+
+        json_output+='}]}'
+    fi
+
+    # Formater et valider le JSON avec jq
+    echo "$json_output" | jq .
+}
+
+
+reload_config() {
+    inotifywait -m -e modify -e delete "${CONFIG_DIR}" | while read path action file; do
+        if [[ ${file} =~ .json$ ]]; then
+            name=${file%.json}
+            echo "Reloading ${file}"
+            stop_tunnel ${name}
+            if [[ -f "${CONFIG_DIR}/${file}" ]]; then
+                start_tunnel "${CONFIG_DIR}/${file}"
+            fi
+        fi
+    done
+}
+
+case $1 in
+    start)
+        if [[ -n $2 ]]; then
+            config="${CONFIG_DIR}/$(basename "$2" .json).json"
+            if [[ -f ${config} ]]; then
+                start_tunnel "${config}"
+            else
+                echo "Fichier de configuration introuvable: ${config}" >&2
+                exit 1
+            fi
+        else
+            find ${CONFIG_DIR} -name "*.json" | while read config; do
+                start_tunnel "${config}"
+            done
+            reload_config &
+            echo $! > ${RELOAD_PID}
+        fi
+        ;;
+    stop)
+        if [[ -n $2 ]]; then
+            name=$(basename "$2" .json)
+            stop_tunnel "${name}"
+        else
+            find ${PID_DIR} -name "*.pid" ! -name "reload.pid" -exec bash -c '
+                kill $(cat "{}") 2>/dev/null
+                rm -f "{}"
+            ' \;
+            [[ -f ${RELOAD_PID} ]] && kill $(cat ${RELOAD_PID}) 2>/dev/null
+            rm -f ${RELOAD_PID}
+        fi
+        ;;
+    restart)
+        if [[ -n $2 ]]; then
+            $0 stop "$2"
+            sleep 1
+            $0 start "$2"
+        else
+            $0 stop
+            sleep 1
+            $0 start
+        fi
+        ;;
+    add-tunnel)
+        if [[ -n $2 ]] && [[ -n $3 ]] && [[ -n $4 ]]; then
+            add_tunnel "$2" "$3" "$4" "${@:5}"
+        else
+            echo "Usage: $0 add-tunnel config -L nom port_local hote_distant port_distant" >&2
+            echo "       $0 add-tunnel config -R nom port_distant hote_local port_local" >&2
+            echo "       $0 add-tunnel config -R nom hote_distant port_distant hote_local port_local" >&2
+            echo "       $0 add-tunnel config -D nom port_local" >&2
+            exit 1
+        fi
+        ;;
+    remove-tunnel)
+        if [[ -n $2 ]] && [[ -n $3 ]]; then
+            remove_tunnel "$2" "$3"
+        else
+            echo "Usage: $0 remove-tunnel config nom_tunnel" >&2
+            exit 1
+        fi
+        ;;
+    pairing)
+        if [[ -n $2 ]] && [[ -n $3 ]] && [[ -n $4 ]] && [[ -n $5 ]]; then
+            pairing "$2" "$3" "$4" "$5" "$6"
+        else
+            echo "Usage: $0 pairing ip user password config_name [bandwidth]" >&2
+            exit 1
+        fi
+        ;;
+    status)
+        if [[ -n $2 ]]; then
+            check_status "$2"
+        else
+            check_status
+        fi
+        ;;
+    *)
+        echo "       $0 {start|stop|restart|add-tunnel|remove-tunnel|pairing|status} [config_name]"
+        exit 1
+esac

@@ -1,0 +1,6 @@
+_sshtunnel_completions() {
+    local cur=${COMP_WORDS[COMP_CWORD]}
+    local configs=$(ls /etc/sshtunnel/conf.d/ | sed 's/.conf$//')
+    COMPREPLY=($(compgen -W "start stop restart $configs" -- "$cur"))
+}
+complete -F _sshtunnel_completions sshtunnel-manager

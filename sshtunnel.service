@@ -1,0 +1,19 @@
+[Unit]
+Description=Gestionnaire de Tunnels SSH Avancé
+Documentation=https://example.com/sshtunnel-manager-docs
+After=network.target
+
+[Service]
+Type=forking
+ExecStart=/usr/local/bin/sshtunnel-manager start
+ExecStop=/usr/local/bin/sshtunnel-manager stop
+ExecReload=/usr/local/bin/sshtunnel-manager restart
+Restart=on-failure
+User=root
+Group=root
+PIDFile=/var/run/sshtunnel/reload.pid
+TimeoutStartSec=30
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
