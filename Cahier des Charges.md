@@ -113,7 +113,7 @@ Structure type :
 ---
 
 ### **6. Monitoring et Maintenance**
-#### **Fonctionnalité : Commande `status`**
+#### **Fonctionnalité : Commande `check`**
 
 Fournir une vision temps réel de l’état des tunnels avec métriques réseau détaillées.
 
@@ -122,24 +122,7 @@ Fournir une vision temps réel de l’état des tunnels avec métriques réseau 
   il faudra prevoir une solution performante de test parallelisé pour anticiper de tres nombreux tunnels
   **Commande** :
   ```bash
-  sudo sshtunnel-manager status [config]
-  ```
-
-  **Sortie Attendue** :
-  ```plaintext
-  [Config: server1]
-  SSH Server: 142.16.102.35:22
-    • Ping: 23 ms ✅
-    • SSH Port: Open (25 ms) ✅
-  Tunnels:
-    - L: 9101 ➔ JectDirect:9100
-      • Local Port: Listening ✅
-      • Remote Endpoint: Reachable (32 ms) ✅
-    - R: cam:5003 ➔ 127.0.0.1:5000
-      • Local Port: Listening ✅
-      • Remote Endpoint: Closed ⚠️
-    - D: 4443
-      • Local Port: Listening ✅
+  sudo sshtunnel-manager check [config]
   ```
 
   **Métriques Collectées** :
@@ -152,11 +135,11 @@ Fournir une vision temps réel de l’état des tunnels avec métriques réseau 
   | endpoint_port | etat (True/False) + latence | si type -R ou -L |
   | endpoint_host | Latence ICMP | si endpoint_port False, sinon prendre comme valeur la latence du endpoint_port |
 
-#### **Options Avancées**
-- **Format JSON** :
-status simplifié de tous les sites geographiques
+
+- **Sortie au Format JSON** :
+check simplifié de tous les sites geographiques
   ```bash
-  sudo sshtunnel-manager status --json
+  sudo sshtunnel-manager check
   ```
   ```json
   {
@@ -171,9 +154,9 @@ status simplifié de tous les sites geographiques
   }
   ```
 
-  status complet d'un site geographique
+  check complet d'un site geographique
   ```bash
-  sudo sshtunnel-manager status [config] --json
+  sudo sshtunnel-manager check [config]
   ```
   ```json
   {
