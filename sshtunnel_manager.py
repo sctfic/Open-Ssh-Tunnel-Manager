@@ -4,6 +4,9 @@ import subprocess
 import shutil
 import logging
 import argparse
+import time
+import sys
+import signal
 from typing import Optional, List, Dict, Any
 
 # Constantes pour les chemins
@@ -237,18 +240,166 @@ def reload_config():
             start_tunnel(config_name)
     logging.info("Configurations rechargées et tunnels redémarrés.")
 
+def run_as_daemon():
+    """Fonction principale pour l'exécution en tant que daemon systemd"""
+    logging.info("Démarrage du service de gestion des tunnels SSH")
+    
+    # Créer les répertoires nécessaires
+    check_dirs()
+    
+    # Initialiser tous les tunnels configurés
+    for config_file in os.listdir(CONFIG_DIR):
+        if config_file.endswith(".json"):
+            config_name = config_file[:-5]
+            try:
+                start_tunnel(config_name)
+                logging.info(f"Tunnel {config_name} initialisé")
+            except Exception as e:
+                logging.error(f"Erreur lors de l'initialisation du tunnel {config_name}: {e}")
+    
+    # Surveillance des modifications de configuration
+    setup_watch_config()
+    
+    # Boucle principale pour maintenir le service actif
+    try:
+        while True:
+            # Vérifier périodiquement l'état des tunnels
+            check_tunnel_health()
+            time.sleep(60)  # Vérification toutes les minutes
+    except KeyboardInterrupt:
+        logging.info("Arrêt du service")
+        # Arrêter proprement tous les tunnels
+        for config_file in os.listdir(CONFIG_DIR):
+            if config_file.endswith(".json"):
+                config_name = config_file[:-5]
+                stop_tunnel(config_name)
+
+def setup_watch_config():
+    """Configure la surveillance des modifications de fichiers de configuration"""
+    try:
+        # Utiliser inotify pour surveiller les modifications de configuration
+        import pyinotify
+        
+        wm = pyinotify.WatchManager()
+        mask = pyinotify.IN_MODIFY | pyinotify.IN_CREATE | pyinotify.IN_DELETE
+        
+        class ConfigHandler(pyinotify.ProcessEvent):
+            def process_IN_CREATE(self, event):
+                if event.pathname.endswith('.json'):
+                    config_name = os.path.basename(event.pathname)[:-5]
+                    logging.info(f"Nouvelle configuration détectée: {config_name}")
+                    start_tunnel(config_name)
+            
+            def process_IN_MODIFY(self, event):
+                if event.pathname.endswith('.json'):
+                    config_name = os.path.basename(event.pathname)[:-5]
+                    logging.info(f"Configuration modifiée: {config_name}")
+                    stop_tunnel(config_name)
+                    start_tunnel(config_name)
+            
+            def process_IN_DELETE(self, event):
+                if event.pathname.endswith('.json'):
+                    config_name = os.path.basename(event.pathname)[:-5]
+                    logging.info(f"Configuration supprimée: {config_name}")
+                    stop_tunnel(config_name)
+        
+        handler = ConfigHandler()
+        notifier = pyinotify.ThreadedNotifier(wm, handler)
+        notifier.daemon = True
+        wm.add_watch(CONFIG_DIR, mask)
+        notifier.start()
+        logging.info(f"Surveillance des modifications de configuration activée dans {CONFIG_DIR}")
+    except ImportError:
+        logging.warning("Module pyinotify non disponible, surveillance des modifications désactivée")
+
+# def check_tunnel_health():
+#     """Vérifie l'état de tous les tunnels et redémarre ceux qui sont morts, mais rends impossible le l'arret d'une configuration"""
+#     for config_file in os.listdir(CONFIG_DIR):
+#         if not config_file.endswith(".json"):
+#             continue
+#         config_name = config_file[:-5]
+#         pid_file = os.path.join(PID_DIR, f"{config_name}.pid")
+#         if not os.path.exists(pid_file):
+#             logging.warning(f"Fichier PID manquant pour {config_name}, redémarrage du tunnel")
+#             start_tunnel(config_name)
+#             continue
+#         try:
+#             with open(pid_file, "r") as f:
+#                 pid = int(f.read().strip())
+#             # Vérifier si le processus est toujours en cours d'exécution
+#             os.kill(pid, 0)  # Cela ne fait rien sauf lever une exception si le processus n'existe pas
+#         except (ProcessLookupError, ValueError, OSError):
+#             logging.warning(f"Tunnel {config_name} n'est plus actif, redémarrage")
+#             start_tunnel(config_name)
+
+
+def signal_handler(sig, frame):
+    """Gestionnaire de signaux pour arrêter proprement le service"""
+    logging.info(f"Signal {sig} reçu, arrêt du service...")
+    
+    # Arrêter tous les tunnels
+    for config_file in os.listdir(CONFIG_DIR):
+        if config_file.endswith(".json"):
+            config_name = config_file[:-5]
+            stop_tunnel(config_name)
+    
+    sys.exit(0)
+
+# Enregistrer les gestionnaires de signaux
+signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)
+
+
 if __name__ == "__main__":
     # Vérifications initiales
     check_dependencies()
     check_root()
-    check_dirs()
-
+    
+    # Analyser les arguments de la ligne de commande
     parser = argparse.ArgumentParser(description="Gestionnaire de tunnels SSH")
-    parser.add_argument("command", choices=["start", "stop", "restart", "status", "pairing", "check"])
+    parser.add_argument("command", choices=["start", "stop", "restart", "status", "pairing", "daemon", "check"])
     parser.add_argument("config", nargs="?", help="Nom de la configuration")
+    parser.add_argument("-i", "--ip", help="Adresse IP pour le pairing")
+    parser.add_argument("-u", "--user", help="Nom d'utilisateur pour le pairing")
+    parser.add_argument("-p", "--password", help="Mot de passe pour le pairing")
+    parser.add_argument("-b", "--bandwidth", help="Limites de bande passante (up/down)")
+    parser.add_argument("--json", action="store_true", help="Format de sortie JSON")
     args = parser.parse_args()
 
+    # Exécuter la commande appropriée
     if args.command == "start":
-        start_tunnel(args.config)
+        if args.config:
+            start_tunnel(args.config)
+        else:
+            for config_file in os.listdir(CONFIG_DIR):
+                if config_file.endswith(".json"):
+                    start_tunnel(config_file[:-5])
+    elif args.command == "stop":
+        if args.config:
+            stop_tunnel(args.config)
+        else:
+            for config_file in os.listdir(CONFIG_DIR):
+                if config_file.endswith(".json"):
+                    stop_tunnel(config_file[:-5])
+    elif args.command == "restart":
+        if args.config:
+            stop_tunnel(args.config)
+            start_tunnel(args.config)
+        else:
+            for config_file in os.listdir(CONFIG_DIR):
+                if config_file.endswith(".json"):
+                    config_name = config_file[:-5]
+                    stop_tunnel(config_name)
+                    start_tunnel(config_name)
+    elif args.command == "status":
+        print(check_status(args.config))
+    elif args.command == "pairing":
+        if not all([args.ip, args.user, args.password, args.config]):
+            print("Tous les paramètres sont requis pour le pairing")
+        else:
+            pairing(args.ip, args.user, args.password, args.config, args.bandwidth)
+    elif args.command == "daemon":
+        # Mode daemon pour systemd
+        run_as_daemon()
     elif args.command == "check":
         print(check_status(args.config))

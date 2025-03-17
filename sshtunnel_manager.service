@@ -1,0 +1,23 @@
+[Unit]
+Description=Gestionnaire de Tunnels SSH Avancé
+Documentation=https://github.com/sctfic/SshTunnel/blob/main/readme.md
+After=network.target
+Wants=network-online.target
+
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/bin/python3 /home/alban/Dev/sshtunnel/sshtunnel_manager.py start
+ExecStop=/usr/bin/python3 /home/alban/Dev/sshtunnel/sshtunnel_manager.py stop
+ExecReload=/usr/bin/python3 /home/alban/Dev/sshtunnel/sshtunnel_manager.py restart
+Restart=on-failure
+KillMode=process
+KillSignal=SIGTERM
+PIDFile=/var/run/sshtunnel/reload.pid
+TimeoutStartSec=30
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

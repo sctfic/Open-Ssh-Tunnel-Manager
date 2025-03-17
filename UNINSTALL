@@ -1,36 +1,53 @@
 #!/bin/bash
 
-# Vérification des privilèges root
+# Script de désinstallation pour le gestionnaire de tunnels SSH
+# Doit être exécuté en tant que root
+
+# Vérifier si exécuté en tant que root
 if [ "$EUID" -ne 0 ]; then
-    echo "Erreur : Ce script doit être exécuté en tant que root (utilisez sudo)"
-    exit 1
+  echo "Ce script doit être exécuté en tant que root"
+  exit 1
 fi
 
-# Arrêt et désactivation du service
-echo "Arrêt du service sshtunnel-manager..."
-systemctl stop sshtunnel.service 2>/dev/null || true
-systemctl disable sshtunnel.service 2>/dev/null || true
+echo "Désinstallation du gestionnaire de tunnels SSH..."
 
-# Suppression des fichiers installés
-echo "Suppression des fichiers..."
-rm -f /usr/local/bin/sshtunnel-manager
-rm -f /etc/systemd/system/sshtunnel.service
-rm -f /etc/bash_completion.d/sshtunnel-manager
+# Arrêter et désactiver le service
+echo "Arrêt et désactivation du service..."
+systemctl stop sshtunnel_manager.service
+systemctl disable sshtunnel_manager.service
 
-# Nettoyage des répertoires (uniquement s’ils sont vides ou contiennent des fichiers créés par ce projet)
-echo "Nettoyage des répertoires..."
-rm -rf /etc/sshtunnel
-rm -rf /var/log/sshtunnel
-rm -rf /var/run/sshtunnel
-
-# Ne supprime pas /root/.ssh ni les clés SSH pour éviter de supprimer des données utilisateur non liées
-echo "Note : Les clés SSH dans /root/.ssh/ ne sont pas supprimées pour éviter une perte accidentelle de données."
-
-# Rechargement de systemd pour refléter les changements
-echo "Mise à jour de systemd..."
+# Supprimer les fichiers de service
+echo "Suppression des fichiers de service..."
+rm -f /etc/systemd/system/sshtunnel_manager.service
 systemctl daemon-reload
 
-echo "============= Désinstallation terminée avec succès ! ============="
-echo "Les dépendances (jq, trickle, etc.) n'ont pas été supprimées car elles peuvent être utilisées par d'autres programmes."
-echo "Pour les supprimer manuellement si nécessaire :"
-echo "  sudo apt remove jq trickle inotify-tools autossh sshpass netcat-openbsd curl"
+# Arrêter tous les tunnels SSH en cours d'exécution
+echo "Arrêt de tous les tunnels SSH..."
+for pid_file in /var/run/sshtunnel/*.pid; do
+  if [ -f "$pid_file" ]; then
+    pid=$(cat "$pid_file")
+    echo "Arrêt du tunnel avec PID $pid..."
+    kill -15 $pid 2>/dev/null || true
+    rm -f "$pid_file"
+  fi
+done
+
+# Supprimer les fichiers binaires
+echo "Suppression des fichiers binaires..."
+rm -f /usr/local/bin/sshtunnel_manager.py
+rm -f /usr/local/bin/sshtunnel_manager
+
+# Demander confirmation avant de supprimer les configurations et logs
+read -p "Voulez-vous supprimer toutes les configurations et logs? [y/N]: " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+  echo "Suppression des configurations et logs..."
+  rm -rf /etc/sshtunnel
+  rm -rf /var/log/sshtunnel
+  rm -rf /var/run/sshtunnel
+else
+  echo "Conservation des configurations et logs"
+fi
+
+echo "Désinstallation terminée"
+echo "Note: Les clés SSH dans /root/.ssh ne sont pas supprimées pour éviter une perte accidentelle de données."

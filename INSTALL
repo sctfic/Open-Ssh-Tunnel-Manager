@@ -1,72 +1,55 @@
 #!/bin/bash
 
-# Vérification des privilèges root
+# Script d'installation pour le gestionnaire de tunnels SSH
+# Doit être exécuté en tant que root
+
+# Vérifier si exécuté en tant que root
 if [ "$EUID" -ne 0 ]; then
-    echo "Erreur : Ce script doit être exécuté en tant que root (utilisez sudo)"
-    exit 1
+  echo "Ce script doit être exécuté en tant que root"
+  exit 1
 fi
 
-# Mise à jour des paquets et installation des dépendances
-echo "Installation des dépendances..."
-apt update -y
-apt install -y jq trickle inotify-tools autossh sshpass netcat-openbsd curl || {
-    echo "Erreur : Échec de l'installation des dépendances"
-    exit 1
-}
+echo "Installation du gestionnaire de tunnels SSH..."
 
-# Création des répertoires nécessaires
+# Installer les dépendances
+echo "Installation des dépendances..."
+apt-get update
+apt-get install -y jq trickle inotify-tools autossh sshpass netcat-openbsd curl python3 python3-pip
+
+# Installer les dépendances Python
+echo "Installation des dépendances Python..."
+pip3 install pyinotify
+
+# Créer les répertoires
 echo "Création des répertoires..."
 mkdir -p /etc/sshtunnel/conf.d
 mkdir -p /var/log/sshtunnel
 mkdir -p /var/run/sshtunnel
-mkdir -p /root/.ssh
-chmod 750 /etc/sshtunnel /etc/sshtunnel/conf.d /var/log/sshtunnel /var/run/sshtunnel
-chmod 700 /root/.ssh
-chown root:root /etc/sshtunnel /etc/sshtunnel/conf.d /var/log/sshtunnel /var/run/sshtunnel /root/.ssh
 
-# Copie du script principal
-echo "Installation du script principal..."
-if [ -f ./sshtunnel-manager ]; then
-    cp ./sshtunnel-manager /usr/local/bin/sshtunnel-manager
-    chmod 755 /usr/local/bin/sshtunnel-manager
-else
-    echo "Erreur : Le fichier sshtunnel-manager est introuvable dans le répertoire courant"
-    exit 1
-fi
+# Définir les permissions
+chmod 750 /etc/sshtunnel /etc/sshtunnel/conf.d
+chmod 750 /var/log/sshtunnel
+chmod 750 /var/run/sshtunnel
 
-# Copie du fichier de service systemd
-echo "Configuration du service systemd..."
-if [ -f ./sshtunnel.service ]; then
-    cp ./sshtunnel.service /etc/systemd/system/sshtunnel.service
-    chmod 644 /etc/systemd/system/sshtunnel.service
-else
-    echo "Erreur : Le fichier sshtunnel.service est introuvable dans le répertoire courant"
-    exit 1
-fi
+# Copier les fichiers
+echo "Copie des fichiers..."
+cp sshtunnel_manager.py /usr/local/bin/
+chmod 755 /usr/local/bin/sshtunnel_manager.py
 
-# Copie des fichiers de complétion Bash (si présents)
-if [ -f ./sshtunnel.completions ]; then
-    echo "Installation de la complétion Bash..."
-    cp ./sshtunnel.completions /etc/bash_completion.d/sshtunnel-manager
-    chmod 644 /etc/bash_completion.d/sshtunnel-manager
-fi
+# Créer un lien symbolique pour faciliter l'utilisation
+ln -sf /usr/local/bin/sshtunnel_manager.py /usr/local/bin/sshtunnel_manager
 
-# Copie des fichiers de configuration (si présents dans conf.d/)
-if [ -d ./conf.d ] && [ -n "$(ls -A ./conf.d)" ]; then
-    echo "Copie des fichiers de configuration..."
-    cp ./conf.d/*.json /etc/sshtunnel/conf.d/ 2>/dev/null || true
-    chmod 640 /etc/sshtunnel/conf.d/*.json
-    chown root:root /etc/sshtunnel/conf.d/*.json
-fi
+# Installer le service systemd
+echo "Installation du service systemd..."
+cp sshtunnel_manager.service /etc/systemd/system/
+chmod 644 /etc/systemd/system/sshtunnel_manager.service
 
-# Rechargement de systemd et activation du service
-echo "Activation du service..."
+# Recharger les services systemd
 systemctl daemon-reload
-systemctl enable sshtunnel.service
 
-echo "============= Installation terminée avec succès ! ============="
-echo "Les fichiers de configuration sont dans /etc/sshtunnel/conf.d/"
-echo "Pour démarrer le service immédiatement :"
-echo "  sudo systemctl start sshtunnel.service"
-echo "Pour vérifier l'état du service :"
-echo "  sudo systemctl status sshtunnel.service"
+# Activer le service au démarrage du système
+systemctl enable sshtunnel_manager.service
+
+echo "Installation terminée"
+echo "Démarrez le service avec: systemctl start sshtunnel_manager.service"
+echo "Vérifiez l'état avec: systemctl status sshtunnel_manager.service"
