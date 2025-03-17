@@ -36,11 +36,11 @@ fi
 
 # Copie du fichier de service systemd
 echo "Configuration du service systemd..."
-if [ -f ./sshtunnel-manager.service ]; then
-    cp ./sshtunnel-manager.service /etc/systemd/system/sshtunnel-manager.service
-    chmod 644 /etc/systemd/system/sshtunnel-manager.service
+if [ -f ./sshtunnel.service ]; then
+    cp ./sshtunnel.service /etc/systemd/system/sshtunnel.service
+    chmod 644 /etc/systemd/system/sshtunnel.service
 else
-    echo "Erreur : Le fichier sshtunnel-manager.service est introuvable dans le répertoire courant"
+    echo "Erreur : Le fichier sshtunnel.service est introuvable dans le répertoire courant"
     exit 1
 fi
 
@@ -62,11 +62,11 @@ fi
 # Rechargement de systemd et activation du service
 echo "Activation du service..."
 systemctl daemon-reload
-systemctl enable sshtunnel-manager.service
+systemctl enable sshtunnel.service
 
 echo "============= Installation terminée avec succès ! ============="
 echo "Les fichiers de configuration sont dans /etc/sshtunnel/conf.d/"
 echo "Pour démarrer le service immédiatement :"
-echo "  sudo systemctl start sshtunnel-manager.service"
+echo "  sudo systemctl start sshtunnel.service"
 echo "Pour vérifier l'état du service :"
-echo "  sudo systemctl status sshtunnel-manager.service"
+echo "  sudo systemctl status sshtunnel.service"

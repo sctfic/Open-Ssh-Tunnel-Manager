@@ -1,6 +1,6 @@
 [Unit]
 Description=Gestionnaire de Tunnels SSH Avancé
-Documentation=https://example.com/sshtunnel-manager-docs
+Documentation=https://github.com/sctfic/SshTunnel/blob/main/readme.md
 After=network.target
 
 [Service]

@@ -8,13 +8,13 @@ fi
 
 # Arrêt et désactivation du service
 echo "Arrêt du service sshtunnel-manager..."
-systemctl stop sshtunnel-manager.service 2>/dev/null || true
-systemctl disable sshtunnel-manager.service 2>/dev/null || true
+systemctl stop sshtunnel.service 2>/dev/null || true
+systemctl disable sshtunnel.service 2>/dev/null || true
 
 # Suppression des fichiers installés
 echo "Suppression des fichiers..."
 rm -f /usr/local/bin/sshtunnel-manager
-rm -f /etc/systemd/system/sshtunnel-manager.service
+rm -f /etc/systemd/system/sshtunnel.service
 rm -f /etc/bash_completion.d/sshtunnel-manager
 
 # Nettoyage des répertoires (uniquement s’ils sont vides ou contiennent des fichiers créés par ce projet)

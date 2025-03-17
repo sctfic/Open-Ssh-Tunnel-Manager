@@ -32,9 +32,9 @@ Ce projet fournit une solution robuste pour la gestion automatisée de tunnels S
 ## Installation
 1. **Téléchargez le package** (exemple) :
    ```bash
-   wget https://example.com/sshtunnel-v2.tar.gz
-   tar xzvf sshtunnel-v2.tar.gz
-   cd sshtunnel-v2
+   wget https://github.com/sctfic/SshTunnel/archive/refs/heads/main.zip
+   unzip SshTunnel-main.zip
+   cd SshTunnel-main
    ```
 2. **Exécutez le script d’installation** :
    ```bash
@@ -171,7 +171,7 @@ Pour toute question ou contribution, contactez **Alban Lopez** à [email@example
 ### Instructions
 1. Créez un fichier nommé `README.md` dans le répertoire racine de votre projet.
 2. Copiez-collez le contenu ci-dessus.
-3. Adaptez les liens (ex. `https://example.com/sshtunnel-v2.tar.gz`, email) et la licence si nécessaire.
-4. Ajoutez-le à votre archive ou dépôt (ex. `tar czvf sshtunnel-v2.tar.gz sshtunnel-manager sshtunnel-manager.service sshtunnel.completions INSTALL.sh UNINSTALL.sh README.md conf.d/`).
+3. Adaptez les liens (ex. `https://example.com/sshtunnel.tar.gz`, email) et la licence si nécessaire.
+4. Ajoutez-le à votre archive ou dépôt (ex. `tar czvf sshtunnel.tar.gz sshtunnel-manager sshtunnel-manager.service sshtunnel.completions INSTALL.sh UNINSTALL.sh README.md conf.d/`).
 
 Si vous voulez des modifications (ex. ajout d’une section FAQ, personnalisation du style), faites-le-moi savoir !

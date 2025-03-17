@@ -96,6 +96,8 @@ start_tunnel() {
     if [ -f "$pid_file" ] && kill -0 $(cat "$pid_file") 2>/dev/null; then
         echo -e "${YELLOW}[INFO] Tunnel déjà actif pour $config_name (PID: $(cat $pid_file))${NC}"
         return 0
+    else
+        echo -e "${GREEN}[INFO] Tunnel inactif pour $config_name (PID: $(cat $pid_file))${NC}"
     fi
 
     echo -e "${BLUE}[INFO] Démarrage du tunnel $config_name${NC}"
@@ -118,26 +120,29 @@ start_tunnel() {
         chmod 600 "$ssh_key" # Sécurité renforcée
     fi
 
-    # Ajout des tunnels depuis la configuration
-    jq -c '.tunnels[]' "$config" | while read tunnel; do
-        type=$(jq -r '.type' <<< "$tunnel")
-        case $type in
-            "-L")
-                base_cmd+=" -L $(jq -r '.listen_port+":"+.endpoint_host+":"+.endpoint_port' <<< "$tunnel")"
-                ;;
-            "-R")
-                listen_host=$(jq -r '.listen_host // ""' <<< "$tunnel")
-                if [ -n "$listen_host" ]; then
-                    base_cmd+=" -R ${listen_host}:$(jq -r '.listen_port+":"+.endpoint_host+":"+.endpoint_port' <<< "$tunnel")"
-                else
-                    base_cmd+=" -R $(jq -r '.listen_port+":"+.endpoint_host+":"+.endpoint_port' <<< "$tunnel")"
-                fi
-                ;;
-            "-D")
-                base_cmd+=" -D $(jq -r '.listen_port' <<< "$tunnel")"
-                ;;
-        esac
-    done
+# Ajout des tunnels depuis la configuration
+jq -c '.tunnels[]' "$config" | while read tunnel; do
+    local type=$(jq -r '.type' <<< "$tunnel")
+    local listen_host=$(jq -r '.listen_host // ""' <<< "$tunnel")
+    local listen_port=$(jq -r '.listen_port | tostring' <<< "$tunnel")
+    local endpoint_host=$(jq -r '.endpoint_host' <<< "$tunnel")
+    local endpoint_port=$(jq -r '.endpoint_port | tostring' <<< "$tunnel")
+    case "$type" in
+        "-L")
+            base_cmd+=" -L ${listen_port}:${endpoint_host}:${endpoint_port}"
+            ;;
+        "-R")
+            if [ -n "$listen_host" ]; then
+                base_cmd+=" -R ${listen_host}:${listen_port}:${endpoint_host}:${endpoint_port}"
+            else
+                base_cmd+=" -R ${listen_port}:${endpoint_host}:${endpoint_port}"
+            fi
+            ;;
+        "-D")
+            base_cmd+=" -D ${listen_port}"
+            ;;
+    esac
+done
 
     # Finalisation de la commande
     base_cmd+=" -p $ssh_port $user@$ip"
@@ -171,6 +176,7 @@ stop_tunnel() {
     local config_name=$(basename "$config" .json)
     local pid_file="$PID_DIR/$config_name.pid"
     
+    echo "pid_file: $pid_file"
     if [ ! -f "$pid_file" ]; then
         echo -e "${YELLOW}[INFO] Aucun tunnel en cours d'exécution pour $config_name${NC}"
         return 0
@@ -198,14 +204,6 @@ stop_tunnel() {
     
     rm -f "$pid_file"
     echo -e "${GREEN}[SUCCESS] Tunnel arrêté pour $config_name${NC}"
-}
-
-# Redémarrage d'un tunnel SSH
-restart_tunnel() {
-    local config="$1"
-    stop_tunnel "$config"
-    sleep 1
-    start_tunnel "$config"
 }
 
 # Fonction pour ajouter un tunnel à une configuration existante
@@ -544,9 +542,19 @@ reload_config() {
     done
 }
 
+
+# Redémarrage d'un tunnel SSH
+# restart_tunnel() {
+#     local config="$1"
+#     stop_tunnel "$config"
+#     sleep 1
+#     start_tunnel "$config"
+# }
+
 case $1 in
     start)
         if [[ -n $2 ]]; then
+            echo "Only conf $2"
             config="${CONFIG_DIR}/$(basename "$2" .json).json"
             if [[ -f ${config} ]]; then
                 start_tunnel "${config}"
@@ -555,6 +563,7 @@ case $1 in
                 exit 1
             fi
         else
+            echo "All config"
             find ${CONFIG_DIR} -name "*.json" | while read config; do
                 start_tunnel "${config}"
             done
@@ -563,6 +572,7 @@ case $1 in
         fi
         ;;
     stop)
+        echo "stop"
         if [[ -n $2 ]]; then
             name=$(basename "$2" .json)
             stop_tunnel "${name}"
