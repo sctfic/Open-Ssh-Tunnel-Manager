@@ -7,15 +7,18 @@ import argparse
 import time
 import sys
 import signal
+import inspect
 from typing import Optional, List, Dict, Any
 
 # Constantes pour les chemins
 CONFIG_DIR = "/etc/sshtunnel/conf.d"
 LOG_DIR = "/var/log/sshtunnel"
-PID_DIR = "/var/run/sshtunnel"
+PID_DIR = "/run/sshtunnel"
+
+start_time = time.time()
 
 # Liste des dépendances système requises
-DEPENDENCIES = ['ssh', 'ping', 'netstat', 'nc', 'ssh-keygen']
+DEPENDENCIES = ['ssh', 'ping', 'netstat', 'nc', 'ssh-keygen', 'trickle', 'autossh', 'sshpass']
 
 # Configuration du logging
 logging.basicConfig(
@@ -23,6 +26,12 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
+
+def logline(message):
+    """Affiche le message précédé du numéro de la ligne où cette fonction a été appelée."""
+    frame = inspect.currentframe().f_back
+    line_number = frame.f_lineno
+    print(f"[{line_number}]  {message}")
 
 def check_dependencies() -> None:
     """
@@ -74,37 +83,49 @@ def validate_config(config):
     return True
 
 def start_tunnel(config_name):
-    print(config_name)
+    logline(config_name)
     """Démarre les tunnels SSH définis dans la configuration."""
     pid_file = os.path.join(PID_DIR, f"{config_name}.pid")
     log_file = os.path.join(LOG_DIR, f"{config_name}.log")
+
+    # Vérifier si le tunnel est déjà en cours d'exécution
+    if (os.path.exists(pid_file)):
+        with open(pid_file, "r") as f:
+            pid = int(f.read().strip())
+        try:
+            os.kill(pid, 0)  # Vérifier si le processus est toujours actif
+            logging.info(f"Tunnel {config_name} déjà en cours d'exécution avec PID {pid}")
+            return
+        except OSError:
+            logging.warning(f"Fichier PID trouvé mais le processus {pid} n'est pas actif. Redémarrage du tunnel.")
+
     with open(f"{CONFIG_DIR}/{config_name}.json", "r") as f:
         config = json.load(f)
     validate_config(config)  # Validation préalable
+
     # Construction de la commande de base avec autossh
-    base_cmd = ["autossh", "-M", "0", "-N", "-i", config["ssh_key"], 
-                f"{config['user']}@{config['ip']}", "-p", str(config["ssh_port"])]
-    
+    cmd = ["autossh", "-M", "0", "-N", "-i", config["ssh_key"], 
+           f"{config['user']}@{config['ip']}", "-p", str(config["ssh_port"])]
+
     # Ajout des options avancées si présentes
     if "options" in config and "keepalive_interval" in config["options"]:
-        base_cmd += ["-o", f"ServerAliveInterval={config['options']['keepalive_interval']}"]
-        
+        cmd += ["-o", f"ServerAliveInterval={config['options']['keepalive_interval']}"]
+
     for tunnel in config["tunnels"]:
-        # Définition des options spécifiques au type de tunnel
-        tunnel_opt = ""
+        # Construction des options spécifiques au type de tunnel
         if tunnel["type"] == "-L":
-            tunnel_opt = f"-L {tunnel['listen_port']}:{tunnel['endpoint_host']}:{tunnel['endpoint_port']}"
+            cmd += [f"-L {tunnel['listen_port']}:{tunnel['endpoint_host']}:{tunnel['endpoint_port']}"]
         elif tunnel["type"] == "-R":
-            tunnel_opt = f"-R {tunnel['listen_host']}:{tunnel['listen_port']}:{tunnel['endpoint_host']}:{tunnel['endpoint_port']}"
+            cmd += [f"-R {tunnel['listen_host']}:{tunnel['listen_port']}:{tunnel['endpoint_host']}:{tunnel['endpoint_port']}"]
         elif tunnel["type"] == "-D":
-            tunnel_opt = f"-D {tunnel['listen_port']}"
-        
-        cmd = base_cmd + [tunnel_opt]
-        
-    # Application de la limitation de bande passante si définie
+            cmd += [f"-D {tunnel['listen_port']}"]
+
+    # Application de la limitation de bande passante si définie (ne sera pas visible dans les processus)
     if "bandwidth" in config:
         cmd = ["trickle", "-u", str(config["bandwidth"]["up"]), "-d", str(config["bandwidth"]["down"])] + cmd
-    
+
+    logline(cmd)
+
     # Lancement du processus avec redirection des sorties
     with open(log_file, "a") as log:
         process = subprocess.Popen(cmd, stdout=log, stderr=log)
@@ -113,7 +134,7 @@ def start_tunnel(config_name):
         logging.info(f"Tunnel {config_name} démarré avec PID {process.pid}")
 
 def stop_tunnel(config_name):
-    print(config_name)
+    logline(config_name)
     """Arrête tous les tunnels associés à une configuration donnée."""
     config_path = f"{CONFIG_DIR}/{config_name}.json"
     if not os.path.exists(config_path):
@@ -230,14 +251,10 @@ def check_status(config_name=None):
     # Ajouter les métriques comme dans le cahier des charges
     return json.dumps(result, indent=4)
 
-
-def reload_config():
+def restart_tunnel(config_name):
     """Recharge les configurations et redémarre les tunnels."""
-    for config_file in os.listdir(CONFIG_DIR):
-        if config_file.endswith(".json"):
-            config_name = config_file[:-5]
-            stop_tunnel(config_name)
-            start_tunnel(config_name)
+    stop_tunnel(config_name)
+    start_tunnel(config_name)
     logging.info("Configurations rechargées et tunnels redémarrés.")
 
 def run_as_daemon():
@@ -260,22 +277,28 @@ def run_as_daemon():
     # Surveillance des modifications de configuration
     setup_watch_config()
     
-    # Boucle principale pour maintenir le service actif
-    try:
-        while True:
-            # Vérifier périodiquement l'état des tunnels
-            check_tunnel_health()
-            time.sleep(60)  # Vérification toutes les minutes
-    except KeyboardInterrupt:
-        logging.info("Arrêt du service")
-        # Arrêter proprement tous les tunnels
-        for config_file in os.listdir(CONFIG_DIR):
-            if config_file.endswith(".json"):
-                config_name = config_file[:-5]
-                stop_tunnel(config_name)
+    # # Boucle principale pour maintenir le service actif
+    # try:
+    #     while True:
+    #         # Vérifier périodiquement l'état des tunnels
+    #         check_tunnel_health()
+    #         time.sleep(60)  # Vérification toutes les minutes
+    # except KeyboardInterrupt:
+    #     logging.info("Arrêt du service")
+    #     # Arrêter proprement tous les tunnels
+    #     for config_file in os.listdir(CONFIG_DIR):
+    #         if config_file.endswith(".json"):
+    #             config_name = config_file[:-5]
+    #             stop_tunnel(config_name)
+
+    # Boucle infinie pour empêcher la sortie du script
+    while True:
+        time.sleep(60)
+
 
 def setup_watch_config():
     """Configure la surveillance des modifications de fichiers de configuration"""
+    logline("setup_watch_config")
     try:
         # Utiliser inotify pour surveiller les modifications de configuration
         import pyinotify
@@ -294,8 +317,7 @@ def setup_watch_config():
                 if event.pathname.endswith('.json'):
                     config_name = os.path.basename(event.pathname)[:-5]
                     logging.info(f"Configuration modifiée: {config_name}")
-                    stop_tunnel(config_name)
-                    start_tunnel(config_name)
+                    restart_tunnel(config_name)
             
             def process_IN_DELETE(self, event):
                 if event.pathname.endswith('.json'):
@@ -333,6 +355,20 @@ def setup_watch_config():
 #             start_tunnel(config_name)
 
 
+def status_service():
+    """Renvoie l'état de tous les processus actifs"""
+    result = {"tunnels": []}
+    for pid_file in os.listdir(PID_DIR):
+        config_name = pid_file[:-4]
+        with open(os.path.join(PID_DIR, pid_file), "r") as f:
+            pid = int(f.read().strip())
+        try:
+            os.kill(pid, 0)  # Vérifier si le processus est toujours actif
+            result["tunnels"].append({"name": config_name, "status": "active", "pid": pid})
+        except OSError:
+            result["tunnels"].append({"name": config_name, "status": "inactive"})
+    return json.dumps(result, indent=4)
+
 def signal_handler(sig, frame):
     """Gestionnaire de signaux pour arrêter proprement le service"""
     logging.info(f"Signal {sig} reçu, arrêt du service...")
@@ -363,7 +399,6 @@ if __name__ == "__main__":
     parser.add_argument("-u", "--user", help="Nom d'utilisateur pour le pairing")
     parser.add_argument("-p", "--password", help="Mot de passe pour le pairing")
     parser.add_argument("-b", "--bandwidth", help="Limites de bande passante (up/down)")
-    parser.add_argument("--json", action="store_true", help="Format de sortie JSON")
     args = parser.parse_args()
 
     # Exécuter la commande appropriée
@@ -383,16 +418,14 @@ if __name__ == "__main__":
                     stop_tunnel(config_file[:-5])
     elif args.command == "restart":
         if args.config:
-            stop_tunnel(args.config)
-            start_tunnel(args.config)
+            restart_tunnel(args.config)
         else:
             for config_file in os.listdir(CONFIG_DIR):
                 if config_file.endswith(".json"):
                     config_name = config_file[:-5]
-                    stop_tunnel(config_name)
-                    start_tunnel(config_name)
+                    restart_tunnel(config_name)
     elif args.command == "status":
-        print(check_status(args.config))
+        print(status_service())
     elif args.command == "pairing":
         if not all([args.ip, args.user, args.password, args.config]):
             print("Tous les paramètres sont requis pour le pairing")
@@ -403,3 +436,9 @@ if __name__ == "__main__":
         run_as_daemon()
     elif args.command == "check":
         print(check_status(args.config))
+
+
+    # Calculer la durée d'exécution
+    duration = time.time() - start_time
+    # Afficher la durée d'exécution
+    print(f"Durée : {duration:.2f} sec")

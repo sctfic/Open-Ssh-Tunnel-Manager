@@ -15,13 +15,16 @@ import json
 import tempfile
 from unittest.mock import patch, Mock, mock_open
 import pytest
+import pyinotify
 import sys
+import time
+from unittest.mock import patch, MagicMock
 
 # Ajouter le répertoire parent au chemin d'importation
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from sshtunnel_manager import (
-    check_dependencies, check_root, check_dirs, validate_config,
+    check_dependencies, check_root, check_dirs, setup_watch_config, validate_config,
     start_tunnel, stop_tunnel, add_tunnel, remove_tunnel, pairing,
     check_status, reload_config, CONFIG_DIR, LOG_DIR, PID_DIR
 )
@@ -258,3 +261,101 @@ def test_reload_config(mock_start, mock_stop):
             reload_config()
             mock_stop.assert_called_with("test")
             mock_start.assert_called()
+
+
+
+
+# ### 12. Tests pour `setup_watch_config`
+# @patch('sshtunnel_manager.pyinotify.WatchManager')  # Mock du WatchManager
+# @patch('sshtunnel_manager.pyinotify.ThreadedNotifier')  # Mock du Notifier
+# @patch('sshtunnel_manager.start_tunnel')
+# @patch('sshtunnel_manager.stop_tunnel')
+# def test_setup_watch_config(mock_stop, mock_start, mock_notifier, mock_watch_manager):
+#     """Vérifie que la surveillance déclenche bien start/stop sur modifications."""
+#     # Configurer les mocks
+#     mock_handler = MagicMock()
+#     mock_notifier_instance = MagicMock()
+#     mock_notifier.return_value = mock_notifier_instance
+
+#     # Simuler un événement de création de fichier
+#     def simulate_event():
+#         event = MagicMock()
+#         event.pathname = "/etc/sshtunnel/conf.d/test.json"
+        
+#         # Appeler manuellement les handlers
+#         mock_handler.process_IN_CREATE(event)
+#         mock_handler.process_IN_MODIFY(event)
+#         mock_handler.process_IN_DELETE(event)
+
+#     # Lier la simulation au démarrage du thread
+#     mock_notifier_instance.start.side_effect = simulate_event
+
+#     # Exécuter la fonction
+#     setup_watch_config()
+
+#     # Vérifications
+#     mock_watch_manager.return_value.add_watch.assert_called_once_with(
+#         CONFIG_DIR, 
+#         pyinotify.IN_MODIFY | pyinotify.IN_CREATE | pyinotify.IN_DELETE
+#     )
+    
+#     # Vérifier les appels aux tunnels
+#     mock_start.assert_called_with("test")
+#     mock_stop.assert_called_with("test")
+#     mock_notifier_instance.start.assert_called_once()
+
+
+# @patch('sshtunnel_manager.pyinotify', new_callable=MagicMock)  # Mock global de pyinotify
+# @patch('sshtunnel_manager.Thread')  # Pour intercepter la création du thread
+# @patch('sshtunnel_manager.start_tunnel')
+# @patch('sshtunnel_manager.stop_tunnel')
+# def test_setup_watch_config2(mock_stop, mock_start, mock_thread, mock_pyinotify):
+#     """Vérifie que la surveillance des configurations déclenche les bonnes actions."""
+#     # Configuration du mock pour pyinotify
+#     mock_wm = MagicMock()
+#     mock_pyinotify.WatchManager.return_value = mock_wm
+#     mock_pyinotify.IN_MODIFY = 1
+#     mock_pyinotify.IN_CREATE = 2
+#     mock_pyinotify.IN_DELETE = 4
+
+#     # Création d'un faux gestionnaire d'événements
+#     class FakeHandler:
+#         def __call__(self, *args, **kwargs):
+#             return MagicMock()
+    
+#     # Simulation d'événements de fichiers
+#     def simulate_events(notifier):
+#         # Générer un événement de création
+#         handler = notifier._handler
+#         event = MagicMock()
+#         event.pathname = "/etc/sshtunnel/conf.d/new_config.json"
+#         handler.process_IN_CREATE(event)
+        
+#         # Générer un événement de modification
+#         event.pathname = "/etc/sshtunnel/conf.d/modified_config.json"
+#         handler.process_IN_MODIFY(event)
+        
+#         # Générer un événement de suppression
+#         event.pathname = "/etc/sshtunnel/conf.d/deleted_config.json"
+#         handler.process_IN_DELETE(event)
+        
+#         # Arrêter le notifier
+#         notifier.stop()
+
+#     # Intercepter le démarrage du thread pour exécuter directement la simulation
+#     mock_thread.side_effect = lambda target, daemon: simulate_events(target())
+    
+#     # Exécuter la fonction à tester
+#     setup_watch_config()
+    
+#     # Vérifications
+#     mock_start.assert_any_call('new_config')  # Création -> démarrage
+#     mock_stop.assert_any_call('modified_config')  # Modification -> arrêt + redémarrage
+#     mock_start.assert_any_call('modified_config')  # Modification -> redémarrage
+#     mock_stop.assert_any_call('deleted_config')  # Suppression -> arrêt
+    
+#     # Vérifier que la surveillance est bien configurée
+#     mock_wm.add_watch.assert_called_once_with(
+#         CONFIG_DIR,
+#         mock_pyinotify.IN_MODIFY | mock_pyinotify.IN_CREATE | mock_pyinotify.IN_DELETE
+#     )

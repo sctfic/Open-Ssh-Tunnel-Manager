@@ -14,11 +14,11 @@ echo "Installation du gestionnaire de tunnels SSH..."
 # Installer les dépendances
 echo "Installation des dépendances..."
 apt-get update
-apt-get install -y jq trickle inotify-tools autossh sshpass netcat-openbsd curl python3 python3-pip
+apt-get install -y jq trickle inotify-tools autossh sshpass netcat-openbsd curl python3 python3-pip ssh ping netstat nc ssh-keygen
 
 # Installer les dépendances Python
 echo "Installation des dépendances Python..."
-pip3 install pyinotify
+apt-get install -y python3-pyinotify
 
 # Créer les répertoires
 echo "Création des répertoires..."
@@ -44,11 +44,27 @@ echo "Installation du service systemd..."
 cp sshtunnel_manager.service /etc/systemd/system/
 chmod 644 /etc/systemd/system/sshtunnel_manager.service
 
+# Copie des fichiers de complétion Bash (si présents)
+if [ -f ./sshtunnel.completions ]; then
+    echo "Installation de la complétion Bash..."
+    cp ./sshtunnel.completions /etc/bash_completion.d/sshtunnel-manager
+    chmod 644 /etc/bash_completion.d/sshtunnel-manager
+fi
+
+# Copie des fichiers de configuration (si présents dans conf.d/)
+if [ -d ./conf.d ] && [ -n "$(ls -A ./conf.d)" ]; then
+    echo "Copie des fichiers de configuration..."
+    cp ./conf.d/*.json /etc/sshtunnel/conf.d/ 2>/dev/null || true
+    chmod 640 /etc/sshtunnel/conf.d/*.json
+    chown root:root /etc/sshtunnel/conf.d/*.json
+fi
+
 # Recharger les services systemd
 systemctl daemon-reload
 
 # Activer le service au démarrage du système
-systemctl enable sshtunnel_manager.service
+systemctl enable sshtunnel_manager
+systemctl start sshtunnel_manager
 
 echo "Installation terminée"
 echo "Démarrez le service avec: systemctl start sshtunnel_manager.service"

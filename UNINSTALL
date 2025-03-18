@@ -23,7 +23,7 @@ systemctl daemon-reload
 
 # Arrêter tous les tunnels SSH en cours d'exécution
 echo "Arrêt de tous les tunnels SSH..."
-for pid_file in /var/run/sshtunnel/*.pid; do
+for pid_file in /run/sshtunnel/*.pid; do
   if [ -f "$pid_file" ]; then
     pid=$(cat "$pid_file")
     echo "Arrêt du tunnel avec PID $pid..."
@@ -44,7 +44,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
   echo "Suppression des configurations et logs..."
   rm -rf /etc/sshtunnel
   rm -rf /var/log/sshtunnel
-  rm -rf /var/run/sshtunnel
+  rm -rf /run/sshtunnel
 else
   echo "Conservation des configurations et logs"
 fi
