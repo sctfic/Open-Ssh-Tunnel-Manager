@@ -8,7 +8,7 @@
 # remove_tunnel : Supprime un tunnel existant et vérifie le cas où le tunnel n'existe pas.
 # pairing : Mocke les appels système pour vérifier la génération de clés SSH et la création de la configuration.
 # check_status : Teste le mode global (tous les serveurs) et spécifique (une config) avec des mocks pour subprocess.run.
-# reload_config : Simule le rechargement en vérifiant les appels à stop_tunnel et start_tunnel.
+# restart_tunnel : Simule le rechargement en vérifiant les appels à stop_tunnel et start_tunnel.
 
 import os
 import json
@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from sshtunnel_manager import (
     check_dependencies, check_root, check_dirs, setup_watch_config, validate_config,
     start_tunnel, stop_tunnel, add_tunnel, remove_tunnel, pairing,
-    check_status, reload_config, CONFIG_DIR, LOG_DIR, PID_DIR
+    check_status, restart_tunnel, CONFIG_DIR, LOG_DIR, PID_DIR
 )
 
 # ### 1. Tests pour `check_dependencies`
@@ -173,12 +173,13 @@ def test_stop_tunnel_non_existing(mock_listdir, mock_exists):
 # ### 7. Tests pour `add_tunnel`
 def test_add_tunnel_valid(tmp_path):
     """Vérifie l'ajout d'un tunnel valide."""
-    config_file = tmp_path / "test.json"
+    config_name = "test_config"
+    config_file = tmp_path / f"{config_name}.json"
     config = {"tunnels": []}
     with open(config_file, "w") as f:
         json.dump(config, f)
     
-    add_tunnel(str(config_file), "new_tunnel", "-L", ["8080", "localhost", "80"])
+    add_tunnel(config_name, "new_tunnel", "-L", ["8080", "localhost", "80"])
     with open(config_file, "r") as f:
         updated_config = json.load(f)
     assert len(updated_config["tunnels"]) == 1
@@ -186,35 +187,38 @@ def test_add_tunnel_valid(tmp_path):
 
 def test_add_tunnel_invalid_params(tmp_path):
     """Vérifie qu'une erreur est levée avec des paramètres incorrects."""
-    config_file = tmp_path / "test.json"
+    config_name = "test_config"
+    config_file = tmp_path / f"{config_name}.json"
     config = {"tunnels": []}
     with open(config_file, "w") as f:
         json.dump(config, f)
     
     with pytest.raises(ValueError):
-        add_tunnel(str(config_file), "invalid", "-L", ["8080"])  # Paramètres insuffisants
+        add_tunnel(config_name, "invalid", "-L", ["8080"])  # Paramètres insuffisants
 
 # ### 8. Tests pour `remove_tunnel`
 def test_remove_tunnel_existing(tmp_path):
     """Vérifie la suppression d'un tunnel existant."""
-    config_file = tmp_path / "test.json"
+    config_name = "test_config"
+    config_file = tmp_path / f"{config_name}.json"
     config = {"tunnels": [{"name": "to_remove"}]}
     with open(config_file, "w") as f:
         json.dump(config, f)
     
-    remove_tunnel(str(config_file), "to_remove")
+    remove_tunnel(config_name, "to_remove")
     with open(config_file, "r") as f:
         updated_config = json.load(f)
     assert len(updated_config["tunnels"]) == 0
 
 def test_remove_tunnel_non_existing(tmp_path):
     """Vérifie que rien ne change si le tunnel n'existe pas."""
-    config_file = tmp_path / "test.json"
+    config_name = "test_config"
+    config_file = tmp_path / f"{config_name}.json"
     config = {"tunnels": [{"name": "other"}]}
     with open(config_file, "w") as f:
         json.dump(config, f)
     
-    remove_tunnel(str(config_file), "to_remove")
+    remove_tunnel(config_name, "to_remove")
     with open(config_file, "r") as f:
         updated_config = json.load(f)
     assert len(updated_config["tunnels"]) == 1
@@ -251,16 +255,19 @@ def test_check_status_specific(mock_run):
         assert "servers" in result
         assert "tunnels" in result
 
-# ### 11. Tests pour `reload_config`
+# ### 11. Tests pour `restart_tunnel`
 @patch('sshtunnel_manager.stop_tunnel')
 @patch('sshtunnel_manager.start_tunnel')
-def test_reload_config(mock_start, mock_stop):
-    """Vérifie le rechargement des configurations."""
-    with patch('os.listdir', return_value=["test.json"]):
-        with patch('builtins.open', mock_open(read_data=json.dumps({"tunnels": []}))):
-            reload_config()
-            mock_stop.assert_called_with("test")
-            mock_start.assert_called()
+def test_restart_tunnel(mock_start, mock_stop):
+    """Vérifie que restart_tunnel arrête et redémarre le tunnel pour une configuration donnée."""
+    config_name = "test_config"
+    restart_tunnel(config_name)
+    
+    # Vérifier que stop_tunnel a été appelé pour la configuration donnée
+    mock_stop.assert_called_once_with(config_name)
+    
+    # Vérifier que start_tunnel a été appelé pour la configuration donnée
+    mock_start.assert_called_once_with(config_name)
 
 
 
