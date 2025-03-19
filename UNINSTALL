@@ -12,14 +12,14 @@ fi
 echo "Désinstallation du gestionnaire de tunnels SSH..."
 
 # Arrêter et désactiver le service
-echo "Arrêt et désactivation du service..."
-systemctl stop sshtunnel_manager.service
-systemctl disable sshtunnel_manager.service
+# echo "Arrêt et désactivation du service..."
+# systemctl stop sshtunnel_manager.service
+# systemctl disable sshtunnel_manager.service
 
 # Supprimer les fichiers de service
-echo "Suppression des fichiers de service..."
-rm -f /etc/systemd/system/sshtunnel_manager.service
-systemctl daemon-reload
+# echo "Suppression des fichiers de service..."
+# rm -f /etc/systemd/system/sshtunnel_manager.service
+# systemctl daemon-reload
 
 # Arrêter tous les tunnels SSH en cours d'exécution
 echo "Arrêt de tous les tunnels SSH..."

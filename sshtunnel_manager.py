@@ -1,9 +1,11 @@
 import os
 import json
 import subprocess
+import platform
 import shutil
 import logging
 import argparse
+import socket
 import time
 import sys
 import signal
@@ -63,7 +65,6 @@ def check_dirs(config_dir: str = CONFIG_DIR, log_dir: str = LOG_DIR, pid_dir: st
         except OSError as e:
             logging.error(f"Erreur lors de la création du répertoire {directory} : {e}")
             raise SystemExit(1)
-
 
 def validate_config(config):
     required_fields = ["user", "ip", "ssh_port", "ssh_key", "tunnels"]
@@ -249,27 +250,158 @@ def pairing(ip, admin_user, password, config_name, bandwidth=None):
     with open(f"{CONFIG_DIR}/{config_name}.json", "w") as f:
         json.dump(config, f, indent=4)
 
+
+def is_port_open(ip, port):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(1)  # Timeout de 1 seconde
+    start_time = time.time()  # Temps de début
+    try:
+        sock.connect((ip, port))
+        return round((time.time() - start_time) * 1000, 1)  # Convertir en millisecondes
+    except (socket.timeout, socket.error):
+        return None  # Retourne None si la connexion échoue
+    finally:
+        sock.close()
+
+def is_host_reachable(ip):
+    """Teste si une adresse IP est joignable via ICMP (ping)."""
+    command = ["ping", "-c", "3", "-W", "1", "-i", "0.01", ip]
+    start_time = time.time()  # Temps de début
+    try:
+        output = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1)
+        return round((time.time() - start_time) * 1000, 1)  # Convertir en millisecondes
+        # return output.returncode == 0  # 0 signifie succès, donc l'IP répond au ping
+    except subprocess.TimeoutExpired:
+        return None  # Timeout = l'IP ne répond pas
+    except Exception as e:
+        print(f"Erreur lors du ping: {e}")
+        return None
+
+def is_port_listening(ip, port):
+    """Vérifie si un port est en écoute sur l'IP donnée."""
+    try:
+        output = subprocess.check_output(["netstat", "-tln"], text=True)
+        for line in output.splitlines():
+            if f"{ip}:{port}" in line and "LISTEN" in line:
+                return True
+        return False
+    except subprocess.CalledProcessError:
+        return False
+
 def check_status(config_name=None):
+    """
+    Vérifie l'état des tunnels SSH selon le cahier des charges.
+    - Si config_name est None : check simplifié de tous les sites géographiques.
+    - Sinon : check complet pour la configuration spécifiée.
+    """
     if not config_name:  # Check simplifié de tous les sites
         result = {"servers": []}
         for conf_file in os.listdir(CONFIG_DIR):
-            with open(f"{CONFIG_DIR}/{conf_file}") as f:
-                config = json.load(f)
-            status = {"name": conf_file[:-5], "ip": config["ip"]}
-            ping = subprocess.run(["ping", "-c", "4", config["ip"]], capture_output=True, text=True)
-            # extraire le temps de ping si la commande a réussi
-            status["ping_ms"] = float(ping.stdout.split("time=")[1].split("ms")[0]) if ping.returncode == 0 else None
-            nc = subprocess.run(["nc", "-z", config["ip"], str(config["ssh_port"])], capture_output=True)
-            status["port"] = {"status": nc.returncode == 0, "latency_ms": 25 if nc.returncode == 0 else None}
-            result["servers"].append(status)
+            if conf_file.endswith(".json"):
+                with open(os.path.join(CONFIG_DIR, conf_file)) as f:
+                    config = json.load(f)
+                ip = config["ip"]
+                ssh_port = config["ssh_port"]
+                name = conf_file[:-5]  # Retirer .json
+
+                # Tester d'abord le port SSH
+                port_latency = is_port_open(ip, ssh_port)
+                if port_latency is not None:
+                    # Si le port est ouvert, réutiliser la latence pour ping_ms
+                    ping_ms = port_latency
+                    port_status = True
+                else:
+                    # Sinon, tester avec ping
+                    ping_ms = is_host_reachable(ip)
+                    port_status = False
+
+                status = {
+                    "name": name,
+                    "icmp": {"ip": ip, "status": ping_ms is not None, "latency_ms": ping_ms},
+                    "tcp": {"port": ssh_port, "status": port_status, "latency_ms": port_latency}
+                }
+                result["servers"].append(status)
         return json.dumps(result, indent=4)
-    
-    # Check complet pour une config spécifique
-    with open(f"{CONFIG_DIR}/{config_name}.json") as f:
-        config = json.load(f)
-    result = {"servers": [{"name": config_name, "ip": config["ip"]}], "tunnels": []}
-    # Ajouter les métriques comme dans le cahier des charges
-    return json.dumps(result, indent=4)
+
+    else:  # Check complet pour une config spécifique
+        config_path = os.path.join(CONFIG_DIR, f"{config_name}.json")
+        if not os.path.exists(config_path):
+            return json.dumps({"error": f"Configuration {config_name} introuvable."}, indent=4)
+
+        with open(config_path) as f:
+            config = json.load(f)
+
+        ip = config["ip"]
+        ssh_port = config["ssh_port"]
+
+        # Tester d'abord le port SSH
+        port_latency = is_port_open(ip, ssh_port)
+        if port_latency is not None:
+            ping_ms = port_latency
+            port_status = True
+        else:
+            ping_ms = is_host_reachable(ip)
+            port_status = False
+
+        result = {
+            "servers": [{
+                "name": config_name,
+                "icmp": {"host": ip, "status": ping_ms is not None, "latency_ms": ping_ms},
+                "tcp": {"port": ssh_port, "status": port_status, "latency_ms": port_latency}
+            }],
+            "tunnels": []
+        }
+
+        # Vérification des tunnels
+        for tunnel_type, tunnels in config["tunnels"].items():
+            for port, tunnel in tunnels.items():
+                tunnel_status = {"name": tunnel["name"]}
+
+                # Gestion des listen_port selon le type de tunnel
+                if tunnel_type in ["-L", "-D"]:
+                    listen_port = int(tunnel["listen_port"])
+                    # Vérifier localement si le port est en écoute
+                    listen_port_status = is_port_listening("0.0.0.0", listen_port)
+                    tunnel_status["listen_port"] = {
+                        "port": listen_port,
+                        "status": listen_port_status,
+                        "latency_ms": 1  # Pas de latence pour l'état d'écoute local
+                    }
+                elif tunnel_type == "-R":
+                    # Tester le listen_port sur listen_host
+                    listen_host = tunnel["listen_host"]
+                    listen_port = int(tunnel["listen_port"])
+                    listen_port_latency = is_port_open(listen_host, listen_port)
+                    tunnel_status["listen_port"] = {
+                        "port": listen_port,
+                        "status": listen_port_latency is not None,
+                        "latency_ms": listen_port_latency
+                    }
+                    # Vérifier listen_host si listen_port est fermé
+                    if listen_port_latency is None:
+                        tunnel_status["listen_host"] = {"host": listen_host, "latency_ms": is_host_reachable(listen_host)}
+                    else:
+                        tunnel_status["listen_host"] = {"host": listen_host, "latency_ms": listen_port_latency}
+
+                # Gestion des endpoint_port pour -L et -R
+                if tunnel_type in ["-L", "-R"]:
+                    endpoint_host = tunnel["endpoint_host"]
+                    endpoint_port = int(tunnel["endpoint_port"])
+                    endpoint_port_latency = is_port_open(endpoint_host, endpoint_port)
+                    tunnel_status["endpoint_port"] = {
+                        "port": endpoint_port,
+                        "status": endpoint_port_latency is not None,
+                        "latency_ms": endpoint_port_latency
+                    }
+                    # Vérifier endpoint_host si endpoint_port est fermé
+                    if endpoint_port_latency is None:
+                        tunnel_status["endpoint_host"] = {"host": endpoint_host, "latency_ms": is_host_reachable(endpoint_host)}
+                    else:
+                        tunnel_status["endpoint_host"] = {"host": endpoint_host, "latency_ms": endpoint_port_latency}
+
+                result["tunnels"].append(tunnel_status)
+
+        return json.dumps(result, indent=4)
 
 def restart_tunnel(config_name):
     """Recharge les configurations et redémarre les tunnels."""

@@ -58,11 +58,19 @@ Structure type :
     "ssh_key": "/path/to/key",
     "options": {"keepalive_interval": 10},
     "bandwidth": {"up": 1000, "down": 5000},
-    "tunnels": [
-        {"type":"-L", "name": "printer1", "listen_port": 9101, "endpoint_host": "JectDirect", "endpoint_port": 9100},
-        {"type":"-R", "name": "cam1", "listen_host": "cam", "listen_port": 5003, "endpoint_host": "127.0.0.1", "endpoint_port": 5000},
-        {"type":"-D", "name": "remote_lan1", "listen_port": 4443}
-    ]
+    "tunnels": {
+        "-L": {
+            "9101": {"name": "printer1", "listen_port": 9101, "endpoint_host": "HP", "endpoint_port": 9100},
+            "9102": {"name": "printer2", "listen_port": 9102, "endpoint_host": "xerox", "endpoint_port": 9100}
+        },
+        "-R": {
+            "5003": {"name": "cam1", "listen_port": 5003, "listen_host": "cam", "endpoint_host": "127.0.0.1", "endpoint_port": 5000},
+            "1901": {"name": "scan1", "listen_port": 1901, "listen_host": "scan", "endpoint_host": "127.0.0.1", "endpoint_port": 1900}
+        },
+        "-D": {
+            "4443": {"name": "remote_lan1", "listen_port": 4443}
+        }
+    }
 }
 ```
 
@@ -144,12 +152,11 @@ check simplifié de tous les sites geographiques
   ```json
   {
     "servers": [
-      {
-        "name": "site geographique",
-        "ip": "192.168.1.100",
-        "ping_ms": 23,
-        "port": {"status": True, "latency_ms": 25}
-      }
+        {
+            "name": "site geographique",
+            "icmp": { "host": "142.16.102.35", "status": True, "latency_ms": 23 },
+            "tcp": { "port": 22, "status": True, "latency_ms": 23 }
+        }
     ]
   }
   ```
@@ -162,28 +169,27 @@ check simplifié de tous les sites geographiques
   {
     "servers": [
       {
-        "name": "site geographique",
-        "ip": "192.168.1.100",
-        "ping_ms": 23,
-        "port": {"status": True, "latency_ms": 25}
+            "name": "site geographique",
+            "icmp": { "host": "142.16.102.35", "status": True, "latency_ms": 23},
+            "tcp": { "port": 22, "status": True, "latency_ms": 23}
       },
       "tunnels": [
         {
           "name": "printer1",
-          "listen_port": {"status": True, "latency_ms": 1},
-          "endpoint_port": {"status": True, "latency_ms": 45},
-          "endpoint_host": {"latency_ms": 46}
+          "listen_tcp": {"port": 9104, "status": True, "latency_ms": 1},
+          "endpoint_tcp": {"port": 9100, "status": True, "latency_ms": 45},
+          "endpoint_icmp": {"host": "8.8.8.8", "status": True, "latency_ms": 46}
         },
         {
           "name": "cam1",
-          "listen_port": {"status": True, "latency_ms": 1},
-          "listen_host": {"latency_ms": 1},
-          "endpoint_port": {"status": False, "latency_ms": null},
-          "endpoint_host": {"latency_ms": 46}
+          "listen_tcp": {"port": 9107, "status": True, "latency_ms": 1},
+          "listen_icmp": {"host": "8.8.8.8", "status": True, "latency_ms": 1},
+          "endpoint_tcp": {"port": 9100, "status": False, "latency_ms": null},
+          "endpoint_icmp": {"host": "8.8.4.4", "status": True, "latency_ms": 46}
         },
         {
           "name": "remote_lan1",
-          "listen_port": {"status": True, "latency_ms": 1},
+          "listen_tcp": {"port": 9109, "status": True, "latency_ms": 1},
         }
       ]
     ]
