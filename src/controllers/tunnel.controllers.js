@@ -4,6 +4,7 @@ const { exec, execSync } = require('child_process');
 const tunnelConfigPath = path.join(__dirname, '../configs/tunnels/');
 const pidDir = path.join(__dirname, '../configs/pid');
 const readTunnelsConfig = require('../utils/readTunnelsConfig'); // Fonction pour lire la config
+const logTrace = require('../utils/tools'); // Fonction pour le débogage
 const buildCmd = require('../utils/buildCmd'); // Fonction pour générer la commande
 const { get } = require('http');
 const { error } = require('console');
@@ -11,6 +12,10 @@ const { error } = require('console');
 // Assure-toi que le dossier PID existe
 if (!fs.existsSync(pidDir)) {
     fs.mkdirSync(pidDir, { recursive: true });
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // Fonction pour supprimer le PID d'un tunnel en cas d'erreur
@@ -28,8 +33,16 @@ const removePid = async (tunnelId) => {
 const getTunnelPid = (tunnelId) => {
     const pidPath = path.join(pidDir, `${tunnelId}.pid`);
     if (!fs.existsSync(pidPath)) return null;
-    
-    const pid = fs.readFileSync(pidPath, 'utf-8').trim() * 1;
+
+    let countMax = 100;
+    let pid = null;
+    while (!pid && countMax > 0) {
+    // on attend que le fichier pid soit rempli / lisible
+        sleep(20);
+        countMax--;
+        console.error('empty:', 0);
+        pid = fs.readFileSync(pidPath, 'utf-8').trim() * 1;
+    }
     return pid && process.kill(pid, 0) ? pid : null;
 };
 
@@ -38,7 +51,7 @@ const storeTunnelPid = (tunnelId, pid) => {
     fs.writeFileSync(pidPath, pid, 'utf-8');
 };
 // lis la ligne de commande du processus avec ps -f -p <pid> -o cmd=
-const getCurrentCMD = (pid) => {
+const getPidCMD = (pid) => {
     try {
         const stdout = execSync(`ps -f -p ${pid} -o cmd=`, { encoding: 'utf-8' });
         return stdout.trim();
@@ -50,11 +63,11 @@ const getCurrentCMD = (pid) => {
 const startSingleTunnel = (id) => {
 
     const pid = getTunnelPid(id);
-    logTrace(id, 'pid:',pid);
+    logTrace('start', id, 'pid:',pid);
 
     // Vérifier si un tunnel est déjà en cours
     if (pid) {
-        const cmd = getCurrentCMD(pid); // Fonction hypothétique pour obtenir la commande associée au PID
+        const cmd = getPidCMD(pid); // Fonction hypothétique pour obtenir la commande associée au PID
         if (cmd.match(/autossh/)) {
             return {
                 success: true,
@@ -71,7 +84,7 @@ const startSingleTunnel = (id) => {
     try {
         // Lire la configuration du tunnel
         const config = readTunnelsConfig(id); // Fonction hypothétique pour lire la config
-    logTrace(id, 'conf:',config);
+        // logTrace('start', id, 'conf:',config);
 
         if (!config) {
             return {
@@ -89,6 +102,8 @@ const startSingleTunnel = (id) => {
         const cmd = buildCmd(config);
         const env = { ...process.env, AUTOSSH_PIDFILE: pidFile }; // Définir le fichier PID pour autossh
 
+    logTrace('execSync', id, 'cmd:',cmd);
+
         // Lancer autossh en mode détaché avec execSync
         execSync(cmd, { env, detached: true}, error => {
             if (error) {
@@ -96,6 +111,16 @@ const startSingleTunnel = (id) => {
                 return;
             }
         });
+        let countMax = 100;
+        let pidFileExist = false;
+
+        while (!pidFileExist && countMax > 0) {
+        // on attend que le fichier pid apparaisse
+            countMax--;
+            sleep(50);
+            pidFileExist = fs.existsSync(pidFile);
+            console.error('missing:', id);
+        }
         const pid = getTunnelPid(id);
         if (pid) {
             return {
@@ -130,8 +155,7 @@ const startSingleTunnel = (id) => {
 exports.startTunnel = async (req, res) => {
     const tunnelId = req.params.tunnelId;
     let tunnels = [];
-    logTrace("("+tunnelId+")");
-
+    logTrace('starts', tunnelId);
 
     // Cas où aucun tunnelId n'est spécifié : démarrer tous les tunnels
     if (!tunnelId) {
@@ -147,6 +171,7 @@ exports.startTunnel = async (req, res) => {
         tunnels = await Promise.all(
             files.map(async (file) => {
                 const id = file.replace(".json", "");
+                logTrace('Promise', id);
                 return startSingleTunnel(id);
             })
         );
@@ -161,17 +186,19 @@ exports.startTunnel = async (req, res) => {
         message: "Tous les tunnels ont été demarré.",
         tunnels: tunnels
     };
-
     return res.status(200).json(response);
 };
 const stopSingleTunnel = (id) => {
     const pidFile = path.join(pidDir, `${id}.pid`);
+    logTrace('stop', id, pidFile);
 
     try {
         const pid = getTunnelPid(id);
-        process.kill(pid, 'SIGTERM');
-        // fs.unlinkSync(pidFile);
-        console.log("id", id);
+        process.kill(pid, 'SIGTERM', (error) => { if (error) console.error(error); });
+        logTrace('kill', id, pid);
+        fs.unlink(pidFile, (error) => { });
+
+        logTrace('remove', pidFile);
 
         result = {
             success: true,
@@ -188,30 +215,36 @@ const stopSingleTunnel = (id) => {
             cmd: null,
             status: "error",
             message: `Erreur lors de l'arrêt du tunnel: ${error.message}` };
-    } finally {
-        fs.unlinkSync(pidFile);
     }
     return result;
 };
 exports.stopTunnel = async (req, res) => {
     const tunnelId = req.params.tunnelId;
+    logTrace('stops', tunnelId);
 
     try {
-        const pidFiles = fs.readdirSync(pidDir).filter(file => file.endsWith('.pid'));
+        let pidFiles = fs.readdirSync(pidDir).filter(file => file.endsWith('.pid'));
         if (pidFiles.length === 0) {
             return res.status(404).json({
                 success: false,
-                message: "Aucun tunnel en cours d'exécution." });
+                message: "Aucun tunnel en cours d'exécution." ,
+                tunnels: []
+            });
         }
+
         if (tunnelId) {
             // Arrêter un tunnel spécifique
             pidFiles = pidFiles.filter(file => file.startsWith(tunnelId));
         }
+        logTrace('list', pidFiles);
 
         const result = pidFiles.map(file => {
             const id = path.basename(file, '.pid');
             return stopSingleTunnel(id);
         });
+
+        logTrace('response', result);
+
         return res.status(200).json({
             success: result.every(tunnel => tunnel.success),
             message: "Tous les tunnels ont été arrêtés.",
@@ -220,42 +253,84 @@ exports.stopTunnel = async (req, res) => {
     } catch (error) {
         return res.status(500).json({
             success: false,
-            message: `Erreur lors de l'arrêt des tunnels: ${error.message}`
+            message: `Erreur lors de l'arrêt des tunnels: ${error.message}`,
+            tunnels: []
         });
     }
 };
+const restartSingleTunnel = (id) => {
+    const pidFile = path.join(pidDir, `${id}.pid`);
+    logTrace('RE-start', id, pidFile);
+    let result = {};
+    try {
+        let pid = getTunnelPid(id);
+        process.kill(pid, 'SIGTERM', (error) => { if (error) console.error(error); });
+        logTrace('RE-kill', id, pid);
+        fs.unlink(pidFile, (error) => { });
+        logTrace('RE-remove', pidFile);
 
+        let countMax = 100;
+        let pidFileExist = true;
+        while (pidFileExist && countMax > 0) {
+        // on attend que le fichier pid disparaisse
+            countMax--;
+            sleep(50);
+            pidFileExist = fs.existsSync(pidFile);
+            console.error('toujours la :', id);
+        }
+        result = startSingleTunnel(id);
+        result.success = (pid!=result.pid && result.pid!=null);
+    } catch (error) {
+        result = {
+            success: false,
+            id,
+            pid: null,
+            cmd: null,
+            status: "error",
+            message: `Erreur lors du redémarrage du tunnel: ${error.message}` };
+    }
+    return result;
+}
 exports.restartTunnel = async (req, res) => {
     const tunnelId = req.params.tunnelId;
+    logTrace('restartTunnel', tunnelId);
 
     try {
-        if (!tunnelId) {
-            // Redémarrer tous les tunnels
-            const pidFiles = fs.readdirSync(pidDir).filter(file => file.endsWith('.pid'));
+        let pidFiles = fs.readdirSync(pidDir).filter(file => file.endsWith('.pid'));
 
-            if (pidFiles.length === 0) {
-                return res.status(404).json({ success: false, message: "Aucun tunnel en cours d'exécution." });
-            }
-
-            const results = await Promise.all(pidFiles.map(async (file) => {
-                const id = path.basename(file, '.pid');
-                await stopSingleTunnel(id);
-                return await startSingleTunnel(id);
-            }));
-
-            return res.status(200).json({ success: true, message: "Tous les tunnels ont été redémarrés.", details: results });
-        } else {
-            // Redémarrer un tunnel spécifique
-            await stopSingleTunnel(tunnelId);
-            const result = await startSingleTunnel(tunnelId);
-
-            return res.status(result.success ? 200 : 500).json(result);
+        if (pidFiles.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Aucun tunnel en cours d'exécution.",
+                tunnels: []
+            });
         }
+
+        if (tunnelId) {
+            // Redémarrer un tunnel spécifique
+            pidFiles = pidFiles.filter(file => file.startsWith(tunnelId));
+        }
+
+        logTrace('list', pidFiles);
+
+        const result = pidFiles.map(file => {
+            const id = path.basename(file, '.pid');
+            return restartSingleTunnel(id);
+        });
+
+        return res.status(200).json({
+            success: result.every(tunnel => tunnel.success),
+            message: "Tous les tunnels ont été redémarrés.",
+            tunnels: result
+        });
     } catch (error) {
-        return res.status(500).json({ success: false, message: `Erreur lors du redémarrage des tunnels: ${error.message}` });
+        return res.status(500).json({
+            success: false,
+            message: `Erreur lors du redémarrage des tunnels: ${error.message}`,
+            tunnels: []
+        });
     }
 };
-
 
 // Vérifier l'état d'un tunnel
 exports.getStatus = (req, res) => {
