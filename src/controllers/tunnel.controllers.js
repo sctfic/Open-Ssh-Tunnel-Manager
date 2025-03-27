@@ -1,14 +1,12 @@
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
+const { exec, execSync } = require('child_process');
 const tunnelConfigPath = path.join(__dirname, '../configs/tunnels/');
 const pidDir = path.join(__dirname, '../configs/pid');
-const scriptPath = path.join(__dirname, '../../scripts/start_tunnel.sh');
-
-const tunnelService = require("../services/tunnel.service");
-
 const readTunnelsConfig = require('../utils/readTunnelsConfig'); // Fonction pour lire la config
 const buildCmd = require('../utils/buildCmd'); // Fonction pour générer la commande
+const { get } = require('http');
+const { error } = require('console');
 
 // Assure-toi que le dossier PID existe
 if (!fs.existsSync(pidDir)) {
@@ -27,139 +25,203 @@ const removePid = async (tunnelId) => {
     }
 };
 
-const getStoredPid = (tunnelId) => {
+const getTunnelPid = (tunnelId) => {
     const pidPath = path.join(pidDir, `${tunnelId}.pid`);
     if (!fs.existsSync(pidPath)) return null;
     
-    const pid = fs.readFileSync(pidPath, 'utf-8').trim();
+    const pid = fs.readFileSync(pidPath, 'utf-8').trim() * 1;
     return pid && process.kill(pid, 0) ? pid : null;
 };
 
-const storePid = (tunnelId, pid) => {
+const storeTunnelPid = (tunnelId, pid) => {
     const pidPath = path.join(pidDir, `${tunnelId}.pid`);
     fs.writeFileSync(pidPath, pid, 'utf-8');
 };
+// lis la ligne de commande du processus avec ps -f -p <pid> -o cmd=
+const getCurrentCMD = (pid) => {
+    try {
+        const stdout = execSync(`ps -f -p ${pid} -o cmd=`, { encoding: 'utf-8' });
+        return stdout.trim();
+    } catch (error) {
+        console.error(`Erreur lors de la récupération de la commande pour PID ${pid}:`, error);
+        return null;
+    }
+};
+const startSingleTunnel = (id) => {
 
-exports.startTunnel = async (req, res) => {
-    const tunnelId = req.params.tunnelId;
-    let results = [];
+    const pid = getTunnelPid(id);
+    logTrace(id, 'pid:',pid);
 
-    const startSingleTunnel = async (id) => {
-        const existingPid = getStoredPid(id);
-        if (existingPid) {
+    // Vérifier si un tunnel est déjà en cours
+    if (pid) {
+        const cmd = getCurrentCMD(pid); // Fonction hypothétique pour obtenir la commande associée au PID
+        if (cmd.match(/autossh/)) {
             return {
+                success: true,
                 id,
-                pid: existingPid,
-                cmd: null,
+                pid: pid,
+                cmd: cmd,
                 status: "running",
-                message: `Tunnel ${id} déjà en cours d'exécution.`,
+                message: "Tunnel déjà en cours d'exécution.",
+            };
+        } else {
+            removePid(id); // Fonction hypothétique pour supprimer un PID invalide
+        }
+    }
+    try {
+        // Lire la configuration du tunnel
+        const config = readTunnelsConfig(id); // Fonction hypothétique pour lire la config
+    logTrace(id, 'conf:',config);
+
+        if (!config) {
+            return {
+                success: false,
+                id,
+                pid: null,
+                cmd: null,
+                status: "error",
+                message: "Tunnel non trouvé.",
             };
         }
 
-        try {
-            const config = readTunnelsConfig(id);
-            if (!config) {
-                return { id, pid: null, cmd: null, status: "error", message: "Tunnel non trouvé." };
+        // Préparer le fichier PID et la commande
+        const pidFile = path.join(pidDir, `${id}.pid`);
+        const cmd = buildCmd(config);
+        const env = { ...process.env, AUTOSSH_PIDFILE: pidFile }; // Définir le fichier PID pour autossh
+
+        // Lancer autossh en mode détaché avec execSync
+        execSync(cmd, { env, detached: true}, error => {
+            if (error) {
+                results.push({ id, pid: null, cmd, status: "error", message: error.message });
+                return;
             }
-
-            const pidFile = path.join(pidDir, `${id}.pid`);
-            const cmd = buildCmd(config);
-
-            // Ajout de la variable d'environnement AUTOSSH_PIDFILE
-            const env = { ...process.env, AUTOSSH_PIDFILE: pidFile };
-
-            exec(cmd, { env, detached: true }, (error) => {
-                if (error) {
-                    results.push({ id, pid: null, cmd, status: "error", message: error.message });
-                    return;
-                }
-
-                setTimeout(() => {
-                    if (fs.existsSync(pidFile)) {
-                        const autosshPid = fs.readFileSync(pidFile, 'utf-8').trim();
-                        storePid(id, autosshPid);
-                        results.push({ id, pid: autosshPid, cmd, status: "running", message: "Démarré avec succès." });
-                    } else {
-                        results.push({ id, pid: null, cmd, status: "error", message: "Le fichier PID n'a pas été créé." });
-                    }
-                }, 1000);
-            });
-
-            return { id, pid: null, cmd, status: "starting", message: "Démarrage en cours..." };
-        } catch (error) {
-            return { id, pid: null, cmd: null, status: "error", message: error.message };
+        });
+        const pid = getTunnelPid(id);
+        if (pid) {
+            return {
+                success: true,
+                id,
+                pid: pid,
+                cmd: cmd,
+                status: "running",
+                message: "Démarré avec succès.",
+            };
+        } else {
+            return {
+                success: false,
+                id,
+                pid: null,
+                cmd: cmd,
+                status: "error",
+                message: "Le fichier PID n'a pas été créé.",
+            };
         }
-    };
+    } catch (error) {
+        return {
+            success: false,
+            id,
+            pid: null,
+            cmd: null,
+            status: "error",
+            message: error.message,
+        };
+    }
+};
+exports.startTunnel = async (req, res) => {
+    const tunnelId = req.params.tunnelId;
+    let tunnels = [];
+    logTrace("("+tunnelId+")");
 
+
+    // Cas où aucun tunnelId n'est spécifié : démarrer tous les tunnels
     if (!tunnelId) {
-        // Démarrer tous les tunnels configurés
         const files = fs.readdirSync(tunnelConfigPath);
         if (!files.length) {
-            return res.status(404).json({ message: "Aucun tunnel configuré." });
+            return res.status(404).json({
+                success: false,
+                message: "Aucun tunnel configuré.",
+                tunnels: []
+            });
         }
 
-        results = await Promise.all(files.map((file) => startSingleTunnel(file.replace(".json", ""))));
+        tunnels = await Promise.all(
+            files.map(async (file) => {
+                const id = file.replace(".json", "");
+                return startSingleTunnel(id);
+            })
+        );
     } else {
         // Démarrer un tunnel spécifique
-        const result = await startSingleTunnel(tunnelId);
-        results.push(result);
+        tunnels.push(startSingleTunnel(tunnelId));
     }
 
-    return res.status(200).json(results || []);
+    // Construire la réponse finale
+    const response = {
+        success: tunnels.every(tunnel => tunnel.success), // Vrai si tous les tunnels ont réussi
+        message: "Tous les tunnels ont été demarré.",
+        tunnels: tunnels
+    };
+
+    return res.status(200).json(response);
 };
+const stopSingleTunnel = (id) => {
+    const pidFile = path.join(pidDir, `${id}.pid`);
 
+    try {
+        const pid = getTunnelPid(id);
+        process.kill(pid, 'SIGTERM');
+        // fs.unlinkSync(pidFile);
+        console.log("id", id);
 
+        result = {
+            success: true,
+            id,
+            pid,
+            cmd: null,
+            status: "stopped",
+            message: `Tunnel arrêté avec succès.` };
+    } catch (error) {
+        result = {
+            success: false,
+            id,
+            pid,
+            cmd: null,
+            status: "error",
+            message: `Erreur lors de l'arrêt du tunnel: ${error.message}` };
+    } finally {
+        fs.unlinkSync(pidFile);
+    }
+    return result;
+};
 exports.stopTunnel = async (req, res) => {
     const tunnelId = req.params.tunnelId;
 
     try {
-        if (!tunnelId) {
-            // Arrêter tous les tunnels
-            const pidFiles = fs.readdirSync(pidDir).filter(file => file.endsWith('.pid'));
-
-            if (pidFiles.length === 0) {
-                return res.status(404).json({ success: false, message: "Aucun tunnel en cours d'exécution." });
-            }
-
-            const results = pidFiles.map(file => {
-                const id = path.basename(file, '.pid');
-                return stopSingleTunnel(id);
-            });
-
-            return res.status(200).json({ success: true, message: "Tous les tunnels ont été arrêtés.", details: results });
-        } else {
+        const pidFiles = fs.readdirSync(pidDir).filter(file => file.endsWith('.pid'));
+        if (pidFiles.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Aucun tunnel en cours d'exécution." });
+        }
+        if (tunnelId) {
             // Arrêter un tunnel spécifique
-            const result = stopSingleTunnel(tunnelId);
-            if (!result.success) {
-                return res.status(404).json(result);
-            }
-
-            return res.status(200).json(result);
-        }
-    } catch (error) {
-        return res.status(500).json({ success: false, message: `Erreur lors de l'arrêt des tunnels: ${error.message}` });
-    }
-};
-
-const stopSingleTunnel = (tunnelId) => {
-    const pidPath = path.join(pidDir, `${tunnelId}.pid`);
-
-    if (!fs.existsSync(pidPath)) {
-        return { success: false, tunnelId, message: `Tunnel ${tunnelId} non trouvé ou déjà arrêté.` };
-    }
-
-    try {
-        const pid = fs.readFileSync(pidPath, 'utf-8').trim();
-        if (!pid) {
-            return { success: false, tunnelId, message: `PID introuvable pour ${tunnelId}.` };
+            pidFiles = pidFiles.filter(file => file.startsWith(tunnelId));
         }
 
-        process.kill(pid, 'SIGTERM');
-        fs.unlinkSync(pidPath);
-
-        return { success: true, tunnelId, pid, message: `Tunnel ${tunnelId} arrêté avec succès.` };
+        const result = pidFiles.map(file => {
+            const id = path.basename(file, '.pid');
+            return stopSingleTunnel(id);
+        });
+        return res.status(200).json({
+            success: result.every(tunnel => tunnel.success),
+            message: "Tous les tunnels ont été arrêtés.",
+            tunnels: result
+        });
     } catch (error) {
-        return { success: false, tunnelId, message: `Erreur lors de l'arrêt du tunnel: ${error.message}` };
+        return res.status(500).json({
+            success: false,
+            message: `Erreur lors de l'arrêt des tunnels: ${error.message}`
+        });
     }
 };
 
@@ -191,22 +253,6 @@ exports.restartTunnel = async (req, res) => {
         }
     } catch (error) {
         return res.status(500).json({ success: false, message: `Erreur lors du redémarrage des tunnels: ${error.message}` });
-    }
-};
-
-const startSingleTunnel = async (tunnelId) => {
-    try {
-        const startModule = require('./tunnel.controllers'); // Importer startTunnel
-        const fakeReq = { params: { tunnelId } };
-        const fakeRes = {
-            status: (code) => ({
-                json: (data) => ({ code, ...data }),
-            }),
-        };
-
-        return await startModule.startTunnel(fakeReq, fakeRes);
-    } catch (error) {
-        return { success: false, tunnelId, message: `Erreur lors du démarrage du tunnel: ${error.message}` };
     }
 };
 

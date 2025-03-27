@@ -1,7 +1,7 @@
 // Function to build the command based on the configuration
 function buildCmd(config) {
     const { user, ip, ssh_port, ssh_key, options, bandwidth, tunnels } = config;
-    let cmd = `trickle -u ${bandwidth.up} -d ${bandwidth.down} autossh -M 0 -f -N -i ${ssh_key} -p ${ssh_port} `;
+    let cmd = `trickle -s -u ${bandwidth.up} -d ${bandwidth.down} autossh -M 0 -f -N -i ${ssh_key} -p ${ssh_port} `;
 
     // Add options
     if (options) {
