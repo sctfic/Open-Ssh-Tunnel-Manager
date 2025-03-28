@@ -3,7 +3,11 @@
     "ip": "142.16.102.35",
     "ssh_port": 22,
     "ssh_key": "/path/to/key",
-    "options": {"keepalive_interval": 10},
+    "options": {
+        "compression": "yes",
+        "ServerAliveInterval": 10,
+        "ServerAliveCountMax": 3
+    },
     "bandwidth": {"up": 1000, "down": 5000},
     "tunnels": {
         "-L": {

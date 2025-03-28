@@ -1,18 +1,16 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
-const tunnelConfigPath = path.join(__dirname, '../configs/tunnels/');
+const { readTunnelsConfig } = require('../utils/rwTunnelsConfig'); // Fonction pour lire la config
+const { buildCmd } = require('../utils/buildCmd'); // Fonction pour générer la commande
+const { logTrace, sleep } = require('../utils/tools'); // Fonction pour tracer les logs
+const { log } = require('util');
+
+const tunnelDir = path.join(__dirname, '../configs/tunnels/');
 const pidDir = path.join(__dirname, '../configs/pid');
-const readTunnelsConfig = require('../utils/readTunnelsConfig'); // Fonction pour lire la config
-const buildCmd = require('../utils/buildCmd'); // Fonction pour générer la commande
-const logTrace = require('../utils/tools'); // Fonction pour tracer les logs
 
 if (!fs.existsSync(pidDir)) {
     fs.mkdirSync(pidDir, { recursive: true });
-}
-
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // Fonction pour supprimer le PID d'un tunnel en cas d'erreur
@@ -156,7 +154,7 @@ exports.startTunnel = async (req, res) => {
 
     // Cas où aucun tunnelId n'est spécifié : démarrer tous les tunnels
     if (!tunnelId) {
-        const files = fs.readdirSync(tunnelConfigPath);
+        const files = fs.readdirSync(tunnelDir);
         if (!files.length) {
             return res.status(404).json({
                 success: false,
@@ -280,7 +278,6 @@ const restartSingleTunnel = (id) => {
             countMax--;
             sleep(50);
             pidFileExist = fs.existsSync(pidFile);
-            console.error('toujours la :', id);
         }
         result = startSingleTunnel(id);
         result.success = (pid!=result.pid && result.pid!=null);
@@ -371,7 +368,7 @@ exports.getStatus = async (req, res) => {
     try {
         let tunnels = [];
         const runningProcesses = getRunningAutosshProcesses();
-        const configFiles = fs.readdirSync(tunnelConfigPath); // Liste des fichiers de config
+        const configFiles = fs.readdirSync(tunnelDir); // Liste des fichiers de config
 
         // Tunnels configurés
         const configuredTunnels = configFiles.map(file => {
@@ -420,108 +417,33 @@ exports.getStatus = async (req, res) => {
     }
 };
 
-exports.checkTunnel = async (req, res) => {
+// main fonctions API REST pour modifier la bandwith d'un tunnel
+exports.setBandwidth = async (req, res) => {
+    const tunnelId = req.params.tunnelId;
+    const { up, down } = req.body;
+
     try {
-        const result = await tunnelService.checkTunnel(req.params.id);
-        res.json({ success: true, message: "Test SSH réussi.", result });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-};
-
-// Fonction de pairing avec le serveur SSH
-function pairingServer(ip, adminUser, adminPassword, configName = 'default') {
-    try {
-        // Étape 1 : Générer une nouvelle paire de clés SSH
-        const keyPath = path.join('/root/.ssh', `${configName}_key`);
-        execSync(`ssh-keygen -t ed25519 -f ${keyPath} -N ""`, { stdio: 'inherit' });
-        fs.chmodSync(keyPath, 0o600); // Sécuriser les permissions de la clé privée
-
-        // Étape 2 : Créer l'utilisateur distant et configurer son répertoire SSH
-        const createUserCmd = `
-            useradd -m -s /bin/false ostm_user && 
-            mkdir -p ~ostm_user/.ssh && 
-            chown ostm_user:ostm_user ~ostm_user/.ssh && 
-            chmod 700 ~ostm_user/.ssh && 
-            touch ~ostm_user/.ssh/authorized_keys && 
-            chown ostm_user:ostm_user ~ostm_user/.ssh/authorized_keys && 
-            chmod 600 ~ostm_user/.ssh/authorized_keys
-        `;
-        const sshCmd = `sshpass -p '${adminPassword}' ssh ${adminUser}@${ip} "${createUserCmd}"`;
-        execSync(sshCmd, { stdio: 'inherit' });
-
-        // Étape 3 : Déposer la clé publique sur le serveur
-        const pubKey = fs.readFileSync(`${keyPath}.pub`, 'utf-8').trim();
-        const appendKeyCmd = `echo '${pubKey}' >> ~ostm_user/.ssh/authorized_keys`;
-        const appendSshCmd = `sshpass -p '${adminPassword}' ssh ${adminUser}@${ip} "${appendKeyCmd}"`;
-        execSync(appendSshCmd, { stdio: 'inherit' });
-
-        // Étape 4 : Générer le fichier de configuration JSON
-        const config = {
-            user: 'ostm_user',
-            ip: ip,
-            ssh_port: 22,
-            ssh_key: keyPath,
-            options: { keepalive_interval: 10 },
-            bandwidth: { up: 1000, down: 5000 },
-            tunnels: {
-                '-L': {},
-                '-R': {},
-                '-D': {}
-            }
-        };
-
-        const configDir = path.join(__dirname, '../configs/tunnels');
-        if (!fs.existsSync(configDir)) {
-            fs.mkdirSync(configDir, { recursive: true });
+        const config = readTunnelsConfig(tunnelId);
+        if (!config) {
+            return res.status(404).json({
+                success: false,
+                message: `Tunnel ${tunnelId} non trouvé.`,
+            });
         }
-        const configPath = path.join(configDir, `${configName}.json`);
-        fs.writeFileSync(configPath, JSON.stringify(config, null, 4), 'utf-8');
-        console.log(`Configuration sauvegardée dans ${configPath}`);
 
-        return { success: true, message: 'Pairing réussi', configPath };
-    } catch (error) {
-        console.error(`Erreur lors du pairing avec ${ip}:`, error.message);
-        return { success: false, message: `Erreur: ${error.message}` };
-    }
-}
-exports.pairing = async (req, res) => {
-    const { ip, adminUser, adminPassword, configName } = req.body;
-    try {
-        const result = pairingServer(ip, adminUser, adminPassword, configName);
-        if (result.success) {
-            res.json({ success: true, message: "Tunnel ajouté.", result });
-        } else {
-            res.status(500).json({ success: false, message: result.message });
-        }
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-};
+        config.bandwidth = { up, down };
+        writeTunnelsConfig(tunnelId, config);
 
-exports.unpairing = async (req, res) => {
-    try {
-        const result = await tunnelService.unpairing(req.params.id);
-        res.json({ success: true, message: "Tunnel supprimé.", result });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-};
+        return res.status(200).json({
+            success: true,
+            message: `Bande passante du tunnel ${tunnelId} modifiée.`,
+            config
+        });
 
-exports.addPortForward = async (req, res) => {
-    try {
-        const result = await tunnelService.addPortForward(req.params.id, req.body);
-        res.json({ success: true, message: "Port ajouté.", result });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-};
-
-exports.removePortForward = async (req, res) => {
-    try {
-        const result = await tunnelService.removePortForward(req.params.id, req.params.type, req.params.port);
-        res.json({ success: true, message: "Port supprimé.", result });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        return res.status(500).json({
+            success: false,
+            message: `Erreur lors de la modification de la bande passante: ${error.message}`,
+        });
     }
 };

@@ -26,4 +26,17 @@ function readTunnelsConfig(configName) {
     }
 }
 
-module.exports = readTunnelsConfig;
+
+function writeTunnelsConfig(configName, jsonContent) {
+    try {
+        const configFilePath = path.join(tunnelConfigPath, `${configName}.json`);
+        fs.writeFileSync(configFilePath, JSON.stringify(jsonContent, null, 4), 'utf8');
+        console.log(`Configuration du tunnel ${configName} sauvegardée.`);
+        return true;
+    } catch (error) {
+        console.error(`Erreur lors de la sauvegarde de la configuration du tunnel ${configName}:`, error.message);
+        return false;
+    }
+
+}
+module.exports = { readTunnelsConfig, writeTunnelsConfig };

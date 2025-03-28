@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pairing Form</title>
+</head>
+<body>
+    <h1>Pairing avec un serveur SSH</h1>
+    <form id="pairingForm">
+        <label for="ip">Adresse IP du serveur:</label><br>
+        <input type="text" id="ip" name="ip" required><br><br>
+
+        <label for="adminUser">Nom d'utilisateur admin:</label><br>
+        <input type="text" id="adminUser" name="adminUser" required><br><br>
+
+        <label for="adminPass">Mot de passe admin, ou clé publique</label><br>
+        <input type="password" id="adminPass" name="adminPass" required><br><br>
+
+        <label for="configName">Nom de la configuration:</label><br>
+        <input type="text" id="configName" name="configName" value="test"><br><br>
+
+        <button type="submit">connecter</button>
+    </form>
+
+    <div id="response"></div>
+
+    <script>
+        document.getElementById('pairingForm').addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            const formData = {
+                ip: document.getElementById('ip').value,
+                adminUser: document.getElementById('adminUser').value,
+                adminPass: document.getElementById('adminPass').value,
+                configName: document.getElementById('configName').value
+            };
+
+            try {
+                const response = await fetch('/api/tunnels/pairing', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const result = await response.json();
+                document.getElementById('response').innerText = JSON.stringify(result, null, 2);
+            } catch (error) {
+                document.getElementById('response').innerText = `Erreur: ${error.message}`;
+            }
+        });
+    </script>
+</body>
+</html>

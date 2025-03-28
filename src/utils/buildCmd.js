@@ -27,4 +27,4 @@ function buildCmd(config) {
     return cmd;
 }
 
-module.exports = buildCmd;
+module.exports = { buildCmd };

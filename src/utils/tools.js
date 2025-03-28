@@ -6,14 +6,14 @@ function logTrace(...args) {
     // const lineNumber = callerLine.match(/:(\d+):\d+\)?$/)?.[1] || 'inconnu';
     // console.log(`[Ligne ${lineNumber}]`, ...args);
 }
-function sleep(milliseconds) {
-    const date = Date.now();
-    let currentDate = null;
-    do {
-      currentDate = Date.now();
-    } while (currentDate - date < milliseconds);
-}
-// function sleep(ms) {
-//     return new Promise(resolve => setTimeout(resolve, ms));
+// function sleep(milliseconds) {
+//     const date = Date.now();
+//     let currentDate = null;
+//     do {
+//       currentDate = Date.now();
+//     } while (currentDate - date < milliseconds);
 // }
-module.exports = logTrace, sleep;
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+module.exports = { logTrace, sleep };
