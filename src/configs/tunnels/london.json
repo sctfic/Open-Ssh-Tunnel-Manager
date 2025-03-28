@@ -1,5 +1,5 @@
 {
-    "user": "tunnel_user",
+    "user": "ostm_user",
     "ip": "142.16.102.35",
     "ssh_port": 22,
     "ssh_key": "/path/to/key",
