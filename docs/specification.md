@@ -72,6 +72,7 @@ fichier id.json
 | `/tunnels/unpairing/:id` | `DELETE` | Supprime un tunnel et la clé SSH distante |
 | `/tunnels/add/:id` | `POST` | Ajoute un port forward (-L, -R ou -D) |
 | `/tunnels/remove/:id` | `DELETE` | Supprime un port forward |
+| `/tunnels/bandwith/:id` | `POST` | modifi la bande passante |
 
 ---
 
