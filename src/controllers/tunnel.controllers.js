@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
-const { readTunnelsConfig } = require('../utils/rwTunnelsConfig'); // Fonction pour lire la config
+const { readTunnelsConfig, writeTunnelsConfig } = require('../utils/rwTunnelsConfig'); // Fonction pour lire la config
 const { buildCmd } = require('../utils/buildCmd'); // Fonction pour générer la commande
 const { logTrace, sleep } = require('../utils/tools'); // Fonction pour tracer les logs
 const { log } = require('util');

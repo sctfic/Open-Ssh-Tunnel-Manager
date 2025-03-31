@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bandwidth Form</title>
+    <style>@import url("forms.css");</style>
+</head>
+<body>
+    <div class="container" style="margin-top: 20px;">
+        <h1>Configuration de la bande passante</h1>
+        <form id="bandwidthForm">
+            <!-- Tunnel Selection -->
+            <label for="tunnelId">Nom du tunnel:</label>
+            <input type="text" id="tunnelId" name="tunnelId" 
+                placeholder="paris_server"
+                pattern="^[a-zA-Z0-9_-]+$"
+                title="Nom de configuration existant"
+                required>
+
+            <!-- Upload Bandwidth -->
+            <label for="upload">Débit montant (Kbps):</label>
+            <input type="text" id="upload" name="upload" 
+                placeholder="100"
+                pattern="^\d+$"
+                required>
+
+            <!-- Download Bandwidth -->
+            <label for="download">Débit descendant (Kbps):</label>
+            <input type="text" id="download" name="download" 
+                placeholder="500"
+                pattern="^\d+$"
+                required>
+
+            <button type="submit">Appliquer</button>
+        </form>
+        <pre id="Response"></pre>
+    </div>
+    <script>
+        document.getElementById('bandwidthForm').addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            try {
+                const response = await fetch(`/api/tunnels/setBandwidth/${document.getElementById('tunnelId').value}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        up: parseInt(document.getElementById('upload').value),
+                        down: parseInt(document.getElementById('download').value)
+                    })
+                });
+
+                const result = await response.json();
+                const responseElement = document.getElementById('Response');
+                responseElement.style.display = 'block';
+                responseElement.innerText = JSON.stringify(result, null, 2);
+            } catch (error) {
+                document.getElementById('Response').innerText = `Erreur: ${error.message}`;
+            }
+        });
+    </script>
+</body>
+</html>

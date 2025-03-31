@@ -35,10 +35,10 @@
 
 ## **Technologies**
 - **Backend** : Node.js + Express
-- **Gestion des processus** : `child_process` ou `pm2`
+- **Gestion des processus** : `child_process`
 - **Tunnels SSH** : `autossh`
 - **Contrôle de la bande passante** : `trickle`
-- **Stockage** : Fichiers JSON (un par tunnel, dans `/config/sites/`)
+- **Config lisible** : Fichiers JSON (un par tunnel, dans `/config/sites/`)
 - **Interface web** : [À définir, ex. React, Vue.js, ou autre framework frontend]
 
 ---

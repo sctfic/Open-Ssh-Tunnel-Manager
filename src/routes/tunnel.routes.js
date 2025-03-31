@@ -16,22 +16,22 @@ router.get('/restart/:tunnelId?', tunnelController.restartTunnel);
 // Route pour obtenir l'état de tous les tunnels ou un seul tunnel
 router.get('/status/:tunnelId?', tunnelController.getStatus);
 
-// route pour definir la bande passante d'un tunnel
-router.post('/setBandwidth/:tunnelId', tunnelController.setBandwidth);
-
-// Route pour tester les serveurs SSH
-router.get('/check/:tunnelId?', channelController.checkTunnel);
-
 // Route pour ajouter un nouveau tunnel
 router.post('/pairing', pairingController.pairing);
 
 // Route pour supprimer un tunnel
-router.delete('/unpairing', pairingController.unpairing);
+router.delete('/unpairing/:tunnelId', pairingController.unpairing);
+
+// Route pour tester les serveurs SSH
+router.get('/check/:tunnelId?', channelController.checkTunnel);
+
+// route pour definir la bande passante d'un tunnel
+router.post('/setBandwidth/:tunnelId', tunnelController.setBandwidth);
 
 // Route pour ajouter un port forward à un tunnel
-router.post('/addPortForward', channelController.addPortForward);
+router.post('/addPortForward/:tunnelId', channelController.addPortForward);
 
 // Route pour supprimer un port forward d'un tunnel
-router.delete('/removePortForward', channelController.removePortForward);
+router.get('/removePortForward/:tunnelId/:type/:port', channelController.removePortForward);
 
 module.exports = router;
