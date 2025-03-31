@@ -1,59 +1,186 @@
-// const { exec } = require("child_process");
-// const fs = require("fs");
-// const path = require("path");
+const { readTunnelsConfig, writeTunnelsConfig } = require('../utils/rwTunnelsConfig');
+const { logTrace } = require('../utils/tools');
 
-// const tunnelsDir = path.join(__dirname, "../config/tunnels");
+/**
+ * Ajoute un port de transfert à un tunnel existant
+ * @param {string} tunnelId - Identifiant du tunnel
+ * @param {Object} portData - Données du port à ajouter
+ * @returns {Object} - Résultat de l'opération
+ */
+exports.addPortForward = async (tunnelId, portData) => {
+    try {
+        // Valider les paramètres requis
+        if (!tunnelId) {
+            throw new Error("L'identifiant du tunnel est requis");
+        }
 
-// exports.startTunnel = async (id) => {
-//     const tunnelConfig = loadTunnelConfig(id);
-//     const cmd = buildAutosshCommand(tunnelConfig);
-//     return executeCommand(cmd);
-// };
+        // Vérifier que le type de tunnel est valide
+        const { type, port, name, endpoint_host, endpoint_port, listen_host } = portData;
+        
+        if (!type || !port || !name) {
+            throw new Error("Le type, le port et le nom sont requis");
+        }
+        
+        if (!type.match(/^-[LRD]$/)) {
+            throw new Error("Le type doit être -L, -R ou -D");
+        }
+        
+        // Valider selon le type de tunnel
+        if (type === '-L' && (!endpoint_host || !endpoint_port)) {
+            throw new Error("Pour un tunnel de type -L, endpoint_host et endpoint_port sont requis");
+        } else if (type === '-R' && (!listen_host || !endpoint_host || !endpoint_port)) {
+            throw new Error("Pour un tunnel de type -R, listen_host, endpoint_host et endpoint_port sont requis");
+        }
 
-// exports.stopTunnel = async (id) => {
-//     return executeCommand(`pkill -f "autossh .* ${id}"`);
-// };
+        // Valider que les ports sont des nombres
+        const portNum = parseInt(port);
+        if (isNaN(portNum) || portNum <= 0 || portNum > 65535) {
+            throw new Error("Le port doit être un nombre entre 1 et 65535");
+        }
 
-// exports.restartTunnel = async (id) => {
-//     await this.stopTunnel(id);
-//     return this.startTunnel(id);
-// };
+        if (endpoint_port) {
+            const endpointPortNum = parseInt(endpoint_port);
+            if (isNaN(endpointPortNum) || endpointPortNum <= 0 || endpointPortNum > 65535) {
+                throw new Error("Le port de destination doit être un nombre entre 1 et 65535");
+            }
+        }
 
-// exports.getStatus = async (id) => {
-//     return executeCommand(`pgrep -fl "autossh .* ${id}"`);
-// };
+        // Lire la configuration actuelle
+        const config = readTunnelsConfig(tunnelId);
+        if (!config) {
+            throw new Error(`Tunnel ${tunnelId} non trouvé`);
+        }
 
-// exports.checkTunnel = async (id) => {
-//     const tunnelConfig = loadTunnelConfig(id);
-//     return executeCommand(`ssh -i ${tunnelConfig.ssh_key} ${tunnelConfig.user}@${tunnelConfig.ip} -p ${tunnelConfig.ssh_port} -o BatchMode=yes -o ConnectTimeout=5 exit`);
-// };
+        // Vérifier si le tunnel existe déjà
+        if (!config.tunnels) {
+            config.tunnels = {};
+        }
+        
+        if (!config.tunnels[type]) {
+            config.tunnels[type] = {};
+        }
+        
+        if (config.tunnels[type][port]) {
+            throw new Error(`Le port ${port} est déjà configuré pour ce type de tunnel`);
+        }
 
-// exports.pairing = async (config) => {
-//     const id = generateTunnelId(config);
-//     fs.writeFileSync(path.join(tunnelsDir, `${id}.json`), JSON.stringify(config, null, 4));
-//     return executeCommand(`ssh-keygen -t rsa -b 4096 -f ${config.ssh_key} -N "" && ssh-copy-id -i ${config.ssh_key}.pub ${config.user}@${config.ip} -p ${config.ssh_port}`);
-// };
+        // Préparer l'objet à ajouter selon le type
+        let portConfig = {
+            name,
+            listen_port: portNum
+        };
 
-// exports.unpairing = async (id) => {
-//     fs.unlinkSync(path.join(tunnelsDir, `${id}.json`));
-//     return executeCommand(`ssh -i ${config.ssh_key} ${config.user}@${config.ip} -p ${config.ssh_port} "rm -f ~/.ssh/authorized_keys"`);
-// };
+        if (type === '-L') {
+            portConfig.endpoint_host = endpoint_host;
+            portConfig.endpoint_port = parseInt(endpoint_port);
+        } else if (type === '-R') {
+            portConfig.listen_host = listen_host;
+            portConfig.endpoint_host = endpoint_host;
+            portConfig.endpoint_port = parseInt(endpoint_port);
+        }
+        // Pour -D, on garde juste name et listen_port
 
-// exports.addPortForward = async (id, forward) => {
-//     const tunnelConfig = loadTunnelConfig(id);
-//     tunnelConfig.tunnels[forward.type][forward.listen_port] = forward;
-//     fs.writeFileSync(path.join(tunnelsDir, `${id}.json`), JSON.stringify(tunnelConfig, null, 4));
-//     return `Port ajouté: ${forward.listen_port}`;
-// };
+        // Ajouter le port à la configuration
+        config.tunnels[type][port] = portConfig;
 
-// exports.removePortForward = async (id, type, port) => {
-//     const tunnelConfig = loadTunnelConfig(id);
-//     delete tunnelConfig.tunnels[type][port];
-//     fs.writeFileSync(path.join(tunnelsDir, `${id}.json`), JSON.stringify(tunnelConfig, null, 4));
-//     return `Port ${port} supprimé`;
-// };
+        // Sauvegarder la configuration
+        const saved = writeTunnelsConfig(tunnelId, config);
+        if (!saved) {
+            throw new Error(`Erreur lors de l'enregistrement de la configuration pour ${tunnelId}`);
+        }
 
-// // 📌 Fonctions utilitaires
-// const loadTunnelConfig = (id) => JSON.parse(fs.readFileSync(path.join(tunnelsDir, `${id}.json`)));
-// const executeCommand = (cmd) => new Promise((resolve, reject) => exec(cmd, (err, stdout, stderr) => err ? reject(stderr) : resolve(stdout)));
-// const buildAutosshCommand = (config) => `trickle -u ${config.bandwidth.up} -d ${config.bandwidth.down} autossh -M 0 -N -o ServerAliveInterval=${config.options.keepalive_interval} -i ${config.ssh_key} ${config.user}@${config.ip} -p ${config.ssh_port}`;
+        logTrace(`Port ${type} ${port} ajouté au tunnel ${tunnelId}`);
+        return { 
+            success: true, 
+            tunnelId, 
+            config: config.tunnels[type][port],
+            message: `Port ${port} ajouté avec succès` 
+        };
+
+    } catch (error) {
+        logTrace(`Erreur lors de l'ajout du port: ${error.message}`);
+        throw error;
+    }
+};
+
+/**
+ * Supprime un port de transfert d'un tunnel existant
+ * @param {string} tunnelId - Identifiant du tunnel
+ * @param {string} type - Type de tunnel (-L, -R, -D)
+ * @param {string} port - Numéro du port à supprimer
+ * @returns {Object} - Résultat de l'opération
+ */
+exports.removePortForward = async (tunnelId, type, port) => {
+    try {
+        // Valider les paramètres requis
+        if (!tunnelId) {
+            throw new Error("L'identifiant du tunnel est requis");
+        }
+
+        if (!type || !port) {
+            throw new Error("Le type et le port sont requis");
+        }
+
+        if (!type.match(/^-[LRD]$/)) {
+            throw new Error("Le type doit être -L, -R ou -D");
+        }
+
+        // Lire la configuration actuelle
+        const config = readTunnelsConfig(tunnelId);
+        if (!config) {
+            throw new Error(`Tunnel ${tunnelId} non trouvé`);
+        }
+
+        // Vérifier si le tunnel existe
+        if (!config.tunnels || !config.tunnels[type] || !config.tunnels[type][port]) {
+            throw new Error(`Le port ${port} de type ${type} n'existe pas dans la configuration`);
+        }
+
+        // Stocker une copie du port avant la suppression pour le retourner
+        const removedPort = { ...config.tunnels[type][port] };
+
+        // Supprimer le port
+        delete config.tunnels[type][port];
+
+        // Si le type de tunnel ne contient plus de ports, supprimer la clé
+        if (Object.keys(config.tunnels[type]).length === 0) {
+            delete config.tunnels[type];
+        }
+
+        // Sauvegarder la configuration
+        const saved = writeTunnelsConfig(tunnelId, config);
+        if (!saved) {
+            throw new Error(`Erreur lors de l'enregistrement de la configuration pour ${tunnelId}`);
+        }
+
+        logTrace(`Port ${type} ${port} supprimé du tunnel ${tunnelId}`);
+        return { 
+            success: true, 
+            tunnelId, 
+            type,
+            port,
+            removedConfig: removedPort,
+            message: `Port ${port} supprimé avec succès` 
+        };
+
+    } catch (error) {
+        logTrace(`Erreur lors de la suppression du port: ${error.message}`);
+        throw error;
+    }
+};
+
+/**
+ * Vérifie la connexion SSH du tunnel
+ * @param {string} tunnelId - Identifiant du tunnel
+ * @returns {Object} - Résultat du test
+ */
+exports.checkTunnel = async (tunnelId) => {
+    try {
+        // Validation à implémenter
+        // Cette fonction pourrait tester la connexion SSH sans établir de tunnel
+        // en utilisant une commande ssh simple
+        return { success: true, message: "Fonction non implémentée" };
+    } catch (error) {
+        throw error;
+    }
+};
