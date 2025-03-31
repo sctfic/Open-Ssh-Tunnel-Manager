@@ -1,0 +1,92 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f4;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+}
+
+.container {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    width: 320px;
+    text-align: center;
+}
+
+h1 {
+    color: #333;
+    font-size: 20px;
+}
+
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+label {
+    font-weight: bold;
+    text-align: left;
+}
+
+input {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    box-sizing: border-box;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+input:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+    outline: none;
+}
+
+button {
+    padding: 10px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.3s ease;
+}
+
+button:hover {
+    background: #0056b3;
+}
+
+pre {
+    display: none;
+    margin-top: 15px;
+    padding: 10px;
+    background: #e9ecef;
+    border-radius: 5px;
+    font-size: 10px;
+    word-wrap: break-word;
+    text-align: left;
+    white-space: pre-wrap;       /* Conserve le formatage mais permet les retours à la ligne */
+    word-break: break-all;       /* Force le découpage des mots longs */
+    overflow-wrap: break-word;   /* Alternative moderne à word-break */
+}
+input:invalid {
+    border-color: #dc3545;
+    box-shadow: 0 0 5px rgba(220, 53, 69, 0.3);
+}
+
+input:valid {
+    border-color: #28a745;
+    box-shadow: 0 0 5px rgba(40, 167, 69, 0.3);
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}

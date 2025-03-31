@@ -13,66 +13,73 @@ if (!fs.existsSync(keyDir)) {
     fs.mkdirSync(keyDir, { recursive: true });
 }
 
+// Fonction pour vérifier si une chaîne est une clé publique SSH
+function isPublicKey(str) {
+    return str.startsWith('ssh-') && str.includes(' ');
+}
+
 // Fonction de pairing avec le serveur SSH
-function pairingServer(ip, adminUser, adminPassword, configName = 'test') {
+function pairingServer(ip, ostm_user, ostm_userPass, configName = 'test') {
     try {
-        // Étape 1 : Générer une nouvelle paire de clés SSH
         const keyPath = path.join(keyDir, `${configName}_key`);
-        // si le fichier keyPath n'existe pas
-        if (!fs.existsSync(keyPath)) {
-            console.log(`Génération de la paire de clés SSH pour ${configName}...`, `ssh-keygen -t ed25519 -f ${keyPath} -N ""`);
-            execSync(`ssh-keygen -t ed25519 -f ${keyPath} -N ""`, { stdio: 'inherit' });
-            fs.chmodSync(keyPath, 0o600); // Sécuriser les permissions de la clé privée
-            console.log(`Paire de clés SSH générée dans ${keyPath}.`);
-        }
-        if (adminPassword.lenght > 127) {
-            
-        }
+        let pubKey;
 
-        // Étape 2 : Créer l'utilisateur distant et configurer son répertoire SSH
-        const createUserCmd = `
-            sudo useradd -m -s /bin/false ostm_user && 
-            mkdir -p ~ostm_user/.ssh && 
-            chown ostm_user:ostm_user ~ostm_user/.ssh && 
-            chmod 700 ~ostm_user/.ssh && 
-            touch ~ostm_user/.ssh/authorized_keys && 
-            chown ostm_user:ostm_user ~ostm_user/.ssh/authorized_keys && 
-            chmod 600 ~ostm_user/.ssh/authorized_keys
-        `;
-            console.log(`Création de l'utilisateur distant ostm_user sur ${ip}...`);
-        const sshCmd = `sshpass -p '${adminPassword}' ssh ${adminUser}@${ip} "${createUserCmd}"`;
-        execSync(sshCmd, { stdio: 'inherit' });
-            console.log(`script distant user execité sur ${ip}.`);
-
-        // Étape 3 : Déposer la clé publique sur le serveur
-        const pubKey = fs.readFileSync(`${keyPath}.pub`, 'utf-8').trim();
-        const appendKeyCmd = `echo '${pubKey}' >> ~ostm_user/.ssh/authorized_keys`;
-        const appendSshCmd = `sshpass -p '${adminPassword}' ssh ${adminUser}@${ip} "${appendKeyCmd}"`;
-        execSync(appendSshCmd, { stdio: 'inherit' });
-            console.log(`Clé publique ajoutée à ~ostm_user/.ssh/authorized_keys sur ${ip}.`);
-
-        // Étape 4 : Générer le fichier de configuration JSON
-        const config = {
-            user: 'ostm_user',
-            ip: ip,
-            ssh_port: 22,
-            ssh_key: keyPath,
-            "options": {
-                "compression": "yes",
-                "ServerAliveInterval": 10,
-                "ServerAliveCountMax": 3
-            },
-            bandwidth: { up: 200, down: 200 },
-            tunnels: {
-                '-L': {},
-                '-R': {},
-                '-D': {}
+        // Étape 1 : Vérifier si ostm_userPass est une clé publique ou un mot de passe
+        if (isPublicKey(ostm_userPass)) {
+            pubKey = ostm_userPass.trim();
+            fs.writeFileSync(`${keyPath}.pub`, pubKey, 'utf-8');
+            console.log(`Clé publique fournie enregistrée dans ${keyPath}.pub`);
+        } else {
+            // Étape 2 : Générer une paire de clés si elle n’existe pas
+            if (!fs.existsSync(keyPath)) {
+                console.log(`Génération de la paire de clés SSH pour ${configName}...`);
+                execSync(`ssh-keygen -t ed25519 -f '${keyPath}' -N ""`, { stdio: 'inherit' });
+                fs.chmodSync(keyPath, 0o600); // Sécuriser la clé privée
+                console.log(`Paire de clés SSH générée dans ${keyPath}`);
             }
-        };
+            pubKey = fs.readFileSync(`${keyPath}.pub`, 'utf-8').trim();
 
-        writeTunnelsConfig(configName, config);
+            // Étape 3 : Déposer la clé publique sur le serveur distant
+            console.log(`Connexion à ${ip} pour configurer ${ostm_user}...`);
+            const sshCmd = `sshpass -p '${ostm_userPass}' ssh ${ostm_user}@${ip} "mkdir -p ~/.ssh && echo '${pubKey}' >> ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys"`;
+            execSync(sshCmd, { stdio: 'inherit' });
+            console.log(`Clé publique déposée pour ${ostm_user}@${ip}`);
+        }
 
-        return { success: true, message: 'Pairing réussi', configPath };
+        // Étape 4 : Tester la connexion SSH avec la clé
+        console.log(`Test de la connexion SSH avec ${ostm_user}@${ip}...`);
+        const testCmd = `ssh -i '${keyPath}' -o BatchMode=yes ${ostm_user}@${ip} "echo Yes!"`;
+        const output = execSync(testCmd, { stdio: 'pipe' }).toString().trim();
+
+        // Étape 5 : Valider la réponse et générer la configuration
+        if (output === 'Yes!') {
+            console.log(`Connexion SSH réussie avec la clé pour ${ostm_user}@${ip}`);
+
+            const configPath = path.join(__dirname, '../configs/tunnels', `${configName}.json`);
+            const config = {
+                user: ostm_user,
+                ip: ip,
+                ssh_port: 22,
+                ssh_key: keyPath,
+                options: {
+                    compression: 'yes',
+                    ServerAliveInterval: 10,
+                    ServerAliveCountMax: 3
+                },
+                bandwidth: { up: 200, down: 200 },
+                tunnels: {
+                    '-L': {},
+                    '-R': {},
+                    '-D': {}
+                }
+            };
+
+            writeTunnelsConfig(configName, config);
+
+            return { success: true, message: 'Pairing réussi', configPath };
+        } else {
+            throw new Error(`\nÉchec de la validation de la connexion SSH`);
+        }
     } catch (error) {
         console.error(`Erreur lors du pairing avec ${ip}:`, error.message);
         return { success: false, message: `Erreur: ${error.message}` };
