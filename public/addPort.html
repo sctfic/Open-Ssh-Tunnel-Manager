@@ -151,17 +151,16 @@
                 }
 
                 const formData = {
-                    tunnelName: document.getElementById('tunnelName').value,
-                    tunnelType: tunnelType,
+                    type: tunnelType,
                     name: document.getElementById('name') ? document.getElementById('name').value : null,
                     listen_port: document.getElementById('listen_port') ? parseInt(document.getElementById('listen_port').value) : null,
+                    listen_host: document.getElementById('listen_host') ? document.getElementById('listen_host').value : null,
                     endpoint_host: document.getElementById('endpoint_host') ? document.getElementById('endpoint_host').value : null,
-                    endpoint_port: document.getElementById('endpoint_port') ? parseInt(document.getElementById('endpoint_port').value) : null,
-                    listen_host: document.getElementById('listen_host') ? document.getElementById('listen_host').value : null
+                    endpoint_port: document.getElementById('endpoint_port') ? parseInt(document.getElementById('endpoint_port').value) : null
                 };
 
                 try {
-                    const response = await fetch(`/api/tunnels/addPortForward/${formData.tunnelName}`, {
+                    const response = await fetch(`/api/tunnels/addPortForward/${document.getElementById('tunnelName').value}`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'

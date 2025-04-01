@@ -15,10 +15,10 @@ exports.addPortForward = async (tunnelId, portData) => {
         }
 
         // Vérifier que le type de tunnel est valide
-        const { type, port, name, endpoint_host, endpoint_port, listen_host } = portData;
+        const { type, name, listen_port, listen_host, endpoint_host, endpoint_port } = portData;
         
-        if (!type || !port || !name) {
-            throw new Error("Le type, le port et le nom sont requis");
+        if (!type || !name) {
+            throw new Error("Le type et le nom sont requis");
         }
         
         if (!type.match(/^-[LRD]$/)) {
@@ -33,11 +33,10 @@ exports.addPortForward = async (tunnelId, portData) => {
         }
 
         // Valider que les ports sont des nombres
-        const portNum = parseInt(port);
+        const portNum = parseInt(listen_port);
         if (isNaN(portNum) || portNum <= 0 || portNum > 65535) {
             throw new Error("Le port doit être un nombre entre 1 et 65535");
         }
-
         if (endpoint_port) {
             const endpointPortNum = parseInt(endpoint_port);
             if (isNaN(endpointPortNum) || endpointPortNum <= 0 || endpointPortNum > 65535) {
@@ -60,8 +59,8 @@ exports.addPortForward = async (tunnelId, portData) => {
             config.tunnels[type] = {};
         }
         
-        if (config.tunnels[type][port]) {
-            throw new Error(`Le port ${port} est déjà configuré pour ce type de tunnel`);
+        if (config.tunnels[type][listen_port]) {
+            throw new Error(`Le port ${listen_port} est déjà configuré pour ce type de tunnel`);
         }
 
         // Préparer l'objet à ajouter selon le type
@@ -81,7 +80,7 @@ exports.addPortForward = async (tunnelId, portData) => {
         // Pour -D, on garde juste name et listen_port
 
         // Ajouter le port à la configuration
-        config.tunnels[type][port] = portConfig;
+        config.tunnels[type][listen_port] = portConfig;
 
         // Sauvegarder la configuration
         const saved = writeTunnelsConfig(tunnelId, config);
@@ -89,12 +88,12 @@ exports.addPortForward = async (tunnelId, portData) => {
             throw new Error(`Erreur lors de l'enregistrement de la configuration pour ${tunnelId}`);
         }
 
-        logTrace(`Port ${type} ${port} ajouté au tunnel ${tunnelId}`);
+        logTrace(`Port ${type} ${listen_port} ajouté au tunnel ${tunnelId}`);
         return { 
             success: true, 
             tunnelId, 
-            config: config.tunnels[type][port],
-            message: `Port ${port} ajouté avec succès` 
+            config: config.tunnels[type][listen_port],
+            message: `Port ${listen_port} ajouté avec succès` 
         };
 
     } catch (error) {

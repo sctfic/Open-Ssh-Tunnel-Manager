@@ -27,20 +27,20 @@ exports.checkTunnel = async (req, res) => {
 exports.addPortForward = async (req, res) => {
     try {
         // Validation des entrées de la requête
-        const { type, port, name, endpoint_host, endpoint_port, listen_host } = req.body;
+        const { type, name, endpoint_host, endpoint_port, listen_port, listen_host } = req.body;
         
-        if (!type || !port || !name) {
+        if (!type || !name) {
             return res.status(400).json({ 
                 success: false, 
-                message: "Veuillez fournir le type de tunnel, le port et le nom" 
+                message: "Veuillez fournir le type de tunnel et le nom" 
             });
         }
 
         // Appel au service
-        const result = await tunnelService.addPortForward(req.params.id, req.body);
+        const result = await tunnelService.addPortForward(req.params.tunnelId, req.body);
         
         // Si un tunnel est actif, informer l'utilisateur qu'il doit le redémarrer
-        const pidFile = path.join(pidDir, `${req.params.id}.pid`);
+        const pidFile = path.join(pidDir, `${req.params.tunnelId}.pid`);
         let needRestart = false;
         
         if (fs.existsSync(pidFile)) {
@@ -83,7 +83,7 @@ exports.removePortForward = async (req, res) => {
         const pidFile = path.join(pidDir, `${tunnelId}.pid`);
         if (fs.existsSync(pidFile)) {
             // on redemare le tunnel
-            
+
 
         }
 

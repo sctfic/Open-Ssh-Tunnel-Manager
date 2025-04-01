@@ -35,6 +35,20 @@
                 "listen_host": "cam",
                 "endpoint_host": "127.0.0.1",
                 "endpoint_port": 5000
+            },
+            "6780": {
+                "name": "sedf",
+                "listen_port": 6780,
+                "listen_host": "jygs",
+                "endpoint_host": "127.0.0.1",
+                "endpoint_port": 3456
+            },
+            "6781": {
+                "name": "sedf",
+                "listen_port": 6781,
+                "listen_host": "jygs",
+                "endpoint_host": "127.0.0.1",
+                "endpoint_port": 3456
             }
         },
         "-D": {
