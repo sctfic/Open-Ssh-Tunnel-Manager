@@ -90,3 +90,22 @@ input[type="number"]::-webkit-outer-spin-button {
     -webkit-appearance: none;
     margin: 0;
 }
+
+.checkbox-group {
+    text-align: left;
+    margin-bottom: 10px;
+}
+
+.checkbox-group input[type="checkbox"] {
+    margin-right: 5px;
+}
+.tunnel-icon {
+    height : 32px;
+    filter: saturate(0%);
+}
+
+.tunnel-icon.actif {
+    height : 48px;
+    filter: saturate(100%);
+    border: 2px solid #007bff; /* Exemple : bordure bleue */
+}
