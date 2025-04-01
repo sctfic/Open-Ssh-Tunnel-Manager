@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const tunnelService = require('../services/tunnel.service'); // Import du service
+const tunnelController = require('../controllers/tunnel.controllers');
 
 const tunnelDir = path.join(__dirname, '../configs/tunnels/');
 const pidDir = path.join(__dirname, '../configs/pid');
@@ -28,7 +29,7 @@ exports.addPortForward = async (req, res) => {
     try {
         // Validation des entrées de la requête
         const { type, name, endpoint_host, endpoint_port, listen_port, listen_host } = req.body;
-        
+        const tunnelId = req.params.tunnelId;
         if (!type || !name) {
             return res.status(400).json({ 
                 success: false, 
@@ -37,21 +38,19 @@ exports.addPortForward = async (req, res) => {
         }
 
         // Appel au service
-        const result = await tunnelService.addPortForward(req.params.tunnelId, req.body);
+        const result = await tunnelService.addPortForward(tunnelId, req.body);
         
         // Si un tunnel est actif, informer l'utilisateur qu'il doit le redémarrer
-        const pidFile = path.join(pidDir, `${req.params.tunnelId}.pid`);
-        let needRestart = false;
-        
+        const pidFile = path.join(pidDir, `${tunnelId}.pid`);
         if (fs.existsSync(pidFile)) {
-            needRestart = true;
+            // on redemare le tunnel
+            tunnelController.restartTunnel(tunnelId);
         }
 
         res.json({ 
             success: true, 
-            message: `Port ajouté${needRestart ? '. Veuillez redémarrer le tunnel pour appliquer les changements' : '.'}`, 
-            result,
-            needRestart 
+            message: `Port ajouté`, 
+            result
         });
     } catch (error) {
         res.status(error.message.includes("non trouvé") ? 404 : 500)
@@ -83,13 +82,12 @@ exports.removePortForward = async (req, res) => {
         const pidFile = path.join(pidDir, `${tunnelId}.pid`);
         if (fs.existsSync(pidFile)) {
             // on redemare le tunnel
-
-
+            tunnelController.restartTunnel(tunnelId);
         }
 
         res.json({ 
             success: true, 
-            message: `Port supprimé${needRestart ? '. Veuillez redémarrer le tunnel pour appliquer les changements' : '.'}`, 
+            message: `Port supprimé`, 
             result
         });
     } catch (error) {
