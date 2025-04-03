@@ -160,7 +160,7 @@
                 };
 
                 try {
-                    const response = await fetch(`/api/tunnels/addPortForward/${document.getElementById('tunnelName').value}`, {
+                    const response = await fetch(`/api/channel/add/${document.getElementById('tunnelName').value}`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
