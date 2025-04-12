@@ -9,7 +9,7 @@ let searchTimeout = null;
 const tunnelList = document.getElementById('tunnelList');
 const startAllBtn = document.getElementById('startAllBtn');
 const stopAllBtn = document.getElementById('stopAllBtn');
-const refreshBtn = document.getElementById('refreshBtn');
+// const refreshBtn = document.getElementById('refreshBtn');
 const addTunnelBtn = document.getElementById('addTunnelBtn');
 const addTunnelModal = document.getElementById('addTunnelModal');
 const pairingForm = document.getElementById('pairingForm');
@@ -45,15 +45,30 @@ function showNotification(message, type = 'success') {
     }, 3000);
 }
 
-// Fonctions API (unchanged from previous, included for completeness)
+// Logarithmic scale for sliders
+function linearToLog(value, min, max) {
+    const minLog = Math.log(1); // Start at 1 to avoid log(0)
+    const maxLog = Math.log(max);
+    const scale = (maxLog - minLog) / (max - min);
+    return Math.exp(minLog + scale * (value - min));
+}
+
+function logToLinear(value, min, max) {
+    const minLog = Math.log(1);
+    const maxLog = Math.log(max);
+    const scale = (maxLog - minLog) / (max - min);
+    return min + (Math.log(value) - minLog) / scale;
+}
+
+// Fonctions API
 async function fetchData(endpoint) {
     try {
         showLoading();
         const response = await fetch(`${API_BASE_URL}${endpoint}`);
         const data = await response.json();
-        console.log(data);
+        // console.log(data);
         hideLoading();
-
+        
         if (!data.success) {
             throw new Error(data.message || 'Une erreur est survenue');
         }
@@ -155,13 +170,13 @@ async function restartTunnel(tunnelId) {
 
 async function checkTunnel(tunnelId) {
     const data = await fetchData(`/channel/check/${tunnelId}`);
+    // console.log('checkTunnel', data);
     if (data) {
-        console.log(`Tunnel ${tunnelId} checked:`, data);
         const tunnelItem = document.querySelector(`[data-tunnel-id="${tunnelId}"]`);
         if (tunnelItem) {
             const channelsContainer = tunnelItem.querySelector('.channels-list');
             renderChannels(data.channels, channelsContainer, tunnelId);
-            console.log(data.channels, channelsContainer, tunnelId);
+            // console.log(data.channels, channelsContainer, tunnelId);
             
             const upBandwidth = tunnelItem.querySelector('.up-bandwidth');
             const downBandwidth = tunnelItem.querySelector('.down-bandwidth');
@@ -169,10 +184,10 @@ async function checkTunnel(tunnelId) {
             const downValue = tunnelItem.querySelector('.down-value');
             
             if (data.bandwidth) {
-                upBandwidth.value = data.bandwidth.up;
-                downBandwidth.value = data.bandwidth.down;
-                upValue.textContent = `${data.bandwidth.up} Kbps`;
-                downValue.textContent = `${data.bandwidth.down} Kbps`;
+                upBandwidth.value = logToLinear(data.bandwidth.up, 0, 10000);
+                downBandwidth.value = logToLinear(data.bandwidth.down, 0, 10000);
+                upValue.textContent = `${Math.round(data.bandwidth.up)} Kbps`;
+                downValue.textContent = `${Math.round(data.bandwidth.down)} Kbps`;
             }
         }
         
@@ -181,17 +196,56 @@ async function checkTunnel(tunnelId) {
 }
 
 async function updateBandwidth(tunnelId, up, down) {
-    const data = await postData(`/tunnels/bandwidth/${tunnelId}`, { up, down });
+    // Trouver l'état actuel du tunnel AVANT l'appel API
+    const tunnel = tunnelsData.find(t => t.id === tunnelId);
+    const wasRunning = tunnel && tunnel.status === 'running';
+
+    const logUp = Math.round(linearToLog(up, 0, 10000));
+    const logDown = Math.round(linearToLog(down, 0, 10000));
+    const data = await postData(`/tunnels/bandwidth/${tunnelId}`, { up: logUp, down: logDown });
+
     if (data) {
         showNotification(`Bande passante mise à jour pour ${tunnelId}`, 'success');
+        // Redémarrer si le tunnel tournait ***
+        if (wasRunning) {
+            showNotification(`Redémarrage du tunnel ${tunnelId} pour appliquer les changements...`, 'info');
+            // On utilise setTimeout pour laisser la première notification s'afficher brièvement
+            setTimeout(() => restartTunnel(tunnelId), 500);
+        } else {
+            // Si le tunnel était arrêté, on rafraîchit juste les données sans redémarrer
+            fetchTunnels(); // Pour s'assurer que l'affichage est cohérent
+        }
     }
 }
 
 async function addPortForward(tunnelId, portData) {
+    // Trouver l'état actuel du tunnel AVANT l'appel API
+    const tunnel = tunnelsData.find(t => t.id === tunnelId);
+    const wasRunning = tunnel && tunnel.status === 'running';
+
     const data = await postData(`/channel/add/${tunnelId}`, portData);
     if (data) {
         showNotification(data.message, 'success');
-        await checkTunnel(tunnelId);
+        // Redémarrer si le tunnel tournait ***
+        if (wasRunning) {
+             showNotification(`Redémarrage du tunnel ${tunnelId} pour activer le nouveau channel...`, 'info');
+             // Utiliser restartTunnel qui rafraîchira tout, y compris le compte de channels
+             setTimeout(() => restartTunnel(tunnelId), 500);
+        } else {
+            // Si le tunnel était arrêté, on met juste à jour les infos locales du channel sans redémarrer
+            checkTunnel(tunnelId); // Met à jour la liste des channels dans l'UI
+            // Il faut aussi mettre à jour le compteur dans le header de l'item manuellement
+            // car fetchTunnels n'est pas appelé.
+            const tunnelItem = document.querySelector(`.tunnel-item[data-tunnel-id="${tunnelId}"]`);
+            if(tunnelItem) {
+                const currentCountElement = tunnelItem.querySelector('.channels-count .count');
+                if(currentCountElement) {
+                    const currentCount = parseInt(currentCountElement.textContent || '0', 10);
+                    currentCountElement.textContent = currentCount + 1;
+                }
+            }
+            updateDashboardStats(); // Met à jour le total des channels global
+        }
     }
 }
 
@@ -199,6 +253,7 @@ async function removePortForward(tunnelId, type, port) {
     const data = await deleteData(`/channel/rm/${tunnelId}/${type}/${port}`);
     if (data) {
         showNotification(data.message, 'success');
+                // console.log('checkTunnel called');
         await checkTunnel(tunnelId);
     }
 }
@@ -214,6 +269,7 @@ async function addTunnel(tunnelData) {
 async function removeTunnel(tunnelId) {
     const data = await deleteData(`/pairing/unplug/${tunnelId}`);
     if (data) {
+        // console.log(data)
         showNotification(data.message, 'success');
         await fetchTunnels();
     }
@@ -224,11 +280,20 @@ function updateDashboardStats() {
     const totalTunnels = tunnelsData.length;
     const activeTunnels = tunnelsData.filter(t => t.status === 'running').length;
     const inactiveTunnels = tunnelsData.filter(t => t.status === 'stopped').length;
-    const orphanTunnels = tunnelsData.filter(t => t.status === 'orphan').length;
+    const orphanTunnelsCount = tunnelsData.filter(t => t.status === 'orphan').length;
+    const orphanTunnelsCard = document.getElementById('orphanTunnelsCard');
 
     document.getElementById('totalTunnels').textContent = totalTunnels;
     document.getElementById('activeTunnels').textContent = activeTunnels;
     document.getElementById('inactiveTunnels').textContent = inactiveTunnels;
+
+    if (orphanTunnelsCount > 0) {
+        document.getElementById('orphanTunnels').textContent = orphanTunnelsCount;
+        orphanTunnelsCard.style.display = 'flex'; // Affiche la carte
+    } else {
+        orphanTunnelsCard.style.display = 'none'; // Masque la carte
+    }
+
     document.getElementById('totalChannels').textContent = tunnelsData.reduce((sum, t) => {
         return sum + (t.channels ?
             Object.values(t.channels).reduce((s, ch) => s + Object.keys(ch).length, 0) : 0);
@@ -250,8 +315,6 @@ function renderTunnels(tunnels) {
     const template = document.getElementById('tunnelItemTemplate').content;
     
     tunnels.forEach(tunnel => {
-        if (!tunnel.id) return;
-        
         const clone = document.importNode(template, true);
         const item = clone.querySelector('.tunnel-item');
         item.setAttribute('data-tunnel-id', tunnel.id);
@@ -262,13 +325,13 @@ function renderTunnels(tunnels) {
                           'status-orphan';
         
         item.querySelector('.status-indicator').className = `status-indicator ${statusClass}`;
-        item.querySelector('.tunnel-name').textContent = tunnel.configName || tunnel.id;
-        item.querySelector('.tunnel-ip').textContent = `${tunnel.ip || 'N/A'}:${tunnel.ssh_port || 22}`;
-        item.querySelector('.tunnel-name-value').textContent = tunnel.configName || tunnel.id;
-        item.querySelector('.tunnel-ip-value').textContent = `${tunnel.ip || 'N/A'}:${tunnel.ssh_port || 22}`;
+        item.querySelector('.tunnel-name').textContent = tunnel.id || 'Process Orphelin';
+        item.querySelector('.tunnel-ip').textContent = `${tunnel.ip || 'PID'} : ${tunnel.ssh_port || tunnel.pid}`;
+        item.querySelector('.tunnel-name-value').textContent = tunnel.id || '?';
+        item.querySelector('.tunnel-ip-value').textContent = `${tunnel.ip} : ${tunnel.ssh_port}`;
         item.querySelector('.tunnel-status-value').textContent = tunnel.status || 'N/A';
         item.querySelector('.tunnel-pid-value').textContent = tunnel.pid || 'N/A';
-        item.querySelector('.tunnel-cmd-value').setAttribute('title', tunnel.cmd || 'Aucune commande');
+        item.querySelector('.tunnel-cmd-value').textContent = tunnel.cmd || 'Aucune commande';
         
         const channelsCount = tunnel.channels ?
             Object.values(tunnel.channels).reduce((sum, ch) => sum + Object.keys(ch).length, 0) : 0;
@@ -276,8 +339,8 @@ function renderTunnels(tunnels) {
         
         const upSpeed = tunnel.bandwidth?.up || 0;
         const downSpeed = tunnel.bandwidth?.down || 0;
-        item.querySelector('.up-speed').textContent = upSpeed;
-        item.querySelector('.down-speed').textContent = downSpeed;
+        item.querySelector('.up-speed').textContent = Math.round(upSpeed);
+        item.querySelector('.down-speed').textContent = Math.round(downSpeed);
         
         const startBtn = item.querySelector('.start-btn');
         const stopBtn = item.querySelector('.stop-btn');
@@ -291,7 +354,7 @@ function renderTunnels(tunnels) {
         
         tunnelList.appendChild(clone);
         
-        setupTunnelEvents(item, tunnel.id);
+        setupTunnelEvents(item, tunnel.id, tunnel);
     });
 }
 
@@ -306,20 +369,60 @@ function renderChannels(channels, container, tunnelId) {
     
     const addChannel = (type, port, channel) => {
         const clone = document.importNode(template, true);
+        const channelItem = clone.querySelector('.channel-item');
         const statusClass = channel.success ? 'status-running' : 'status-stopped';
-        
-        clone.querySelector('.channel-type').textContent = type;
+
+        // *** MODIFICATION ICI pour channel-type ***
+        const channelTypeSpan = clone.querySelector('.channel-type');
+        channelTypeSpan.textContent = ''; // Vider le contenu
+        // Réinitialiser les classes (important)
+        channelTypeSpan.className = 'channel-type'; // Garde seulement la classe de base
+
+        if (type === '-L') {
+            iconClass = 'fa-right-long';
+            typeTitle = 'Local Forward (-L)';
+            typeModifierClass = 'channel-type-L';
+            forwardFrom = channel.listen_port;
+            forwardTo = channel.endpoint_host +':'+ channel.endpoint_port;
+            forwardTitle = 'Transmet vers (mode Local -L)'
+            titleFrom = 'ecoute sur ...';
+            titleTo = 'transmet vers ...';
+
+        } else if (type === '-R') {
+            iconClass = 'fa-left-long';
+            typeTitle = 'Remote Forward (-R)';
+            typeModifierClass = 'channel-type-R';
+            forwardFrom = channel.endpoint_host +':'+ channel.endpoint_port;
+            forwardTo = channel.listen_host +':'+ channel.listen_port;
+            forwardTitle = 'Recupere depuis (mode Remote -R)'
+            titleFrom = 'transmet vers ...';
+            titleTo = 'ecoute depuis ...';
+
+        } else if (type === '-D') {
+            iconClass = 'fa-arrows-left-right';
+            typeTitle = 'Dynamic Forward (-D)';
+            typeModifierClass = 'channel-type-D';
+            forwardFrom = channel.listen_port;
+            forwardTo = '*:*';
+            forwardTitle = 'tunnel SOCKS (mode Dynamique -D)'
+            titleFrom = 'ecoute le Socks5 sur ...';
+            titleTo = 'sortie globale';
+
+        }
+
+        // Ajouter les classes Font Awesome et la classe de rotation/type
+        // if (iconClass) {
+        //     channelTypeSpan.classList.add('fa', iconClass, typeModifierClass);
+        // }
+        // channelTypeSpan.title = typeTitle; // Définir le tooltip
         clone.querySelector('.status-indicator').className = `status-indicator ${statusClass}`;
         clone.querySelector('.channel-name').textContent = channel.name || 'Sans nom';
         
-        let details = `Port: ${port}`;
-        if (type === '-L' || type === '-R') {
-            details += ` - Destination: ${channel.endpoint_host}:${channel.endpoint_port}`;
-        }
-        if (type === '-R' && channel.listen_host) {
-            details += ` - Hôte: ${channel.listen_host}`;
-        }
-        clone.querySelector('.channel-details').textContent = details;
+        let details = `<span title='${titleFrom}'>${forwardFrom}</span>
+        <i class='fa ${iconClass}' title='${forwardTitle}'></i>
+        <span title='${titleTo}'>${forwardTo}</span>`;
+        
+        clone.querySelector('.channel-details').innerHTML = details;
         
         clone.querySelector('.remove-channel-btn').setAttribute('data-type', type);
         clone.querySelector('.remove-channel-btn').setAttribute('data-port', port);
@@ -335,10 +438,8 @@ function renderChannels(channels, container, tunnelId) {
 }
 
 // Fonctions d'événements
-function setupTunnelEvents(item, tunnelId) {
+function setupTunnelEvents(item, tunnelId, tunnel) {
     const tunnelHeader = item.querySelector('.tunnel-header');
-    const toggleBtn = item.querySelector('.toggle-btn');
-    const checkBtn = item.querySelector('.check-btn');
     const startBtn = item.querySelector('.start-btn');
     const stopBtn = item.querySelector('.stop-btn');
     const restartBtn = item.querySelector('.restart-btn');
@@ -352,6 +453,7 @@ function setupTunnelEvents(item, tunnelId) {
     const addChannelForm = item.querySelector('.add-channel-form');
     const cancelAddChannel = item.querySelector('.cancel-add-channel');
     const tabs = item.querySelectorAll('.tab-btn');
+    const bandwidthInfo = item.querySelector('.bandwidth-info');
     
     const showTab = (tabName) => {
         tabs.forEach(t => t.classList.remove('active'));
@@ -365,36 +467,58 @@ function setupTunnelEvents(item, tunnelId) {
             activeContent.classList.remove('hidden');
             
             if (tabName === 'channels' && !item.hasAttribute('data-channels-loaded')) {
+                // console.log('checkTunnel called');
                 checkTunnel(tunnelId);
-                item.setAttribute('data-channels-loaded', 'true');
+                // item.setAttribute('data-channels-loaded', 'true');
+            } else if (tabName === 'settings') {
+                const upBandwidth = item.querySelector('.up-bandwidth');
+                const downBandwidth = item.querySelector('.down-bandwidth');
+                const upValue = item.querySelector('.up-value');
+                const downValue = item.querySelector('.down-value');
+                
+                const up = tunnel.bandwidth?.up || 1000;
+                const down = tunnel.bandwidth?.down || 5000;
+                upBandwidth.value = logToLinear(up, 0, 10000);
+                downBandwidth.value = logToLinear(down, 0, 10000);
+                upValue.textContent = `${Math.round(up)} Kbps`;
+                downValue.textContent = `${Math.round(down)} Kbps`;
             }
         }
     };
     
     tunnelHeader.addEventListener('click', (e) => {
-        if (e.target.tagName === 'BUTTON' || currentView === 'compact') return;
-        item.classList.toggle('active');
-        showTab('channels');
-        toggleBtn.querySelector('i').className = item.classList.contains('active') ?
-            'fas fa-chevron-up' : 'fas fa-chevron-down';
-        if (item.classList.contains('active') && !item.hasAttribute('data-loaded')) {
-            checkTunnel(tunnelId);
-            item.setAttribute('data-loaded', 'true');
+        if (e.target.closest('button, .action-dropdown, .bandwidth-info')) {
+            return; // Ne fait rien si le clic vient d'un bouton, dropdown ou bandwidthInfo
         }
+        // console.log('Tunnel header clicked');
+        if (currentView === 'compact') return;
+        item.classList.toggle('active');
+        if (item.classList.contains('active')) {
+            showTab('channels'); // Affiche l'onglet channels par défaut
+            // if (!item.hasAttribute('data-loaded')) { // Charge les données si nécessaire
+            //     console.log('checkTunnel called');
+            //    checkTunnel(tunnelId);
+            //    item.setAttribute('data-loaded', 'true');
+            // }
+       }
     });
     
-    toggleBtn.addEventListener('click', () => {
-        item.classList.toggle('active');
-        showTab('channels');
-        toggleBtn.querySelector('i').className = item.classList.contains('active') ?
-            'fas fa-chevron-up' : 'fas fa-chevron-down';
-        if (item.classList.contains('active') && !item.hasAttribute('data-loaded')) {
-            checkTunnel(tunnelId);
-            item.setAttribute('data-loaded', 'true');
+    bandwidthInfo.addEventListener('click', () => {
+        // 1. Déplier le tunnel s'il ne l'est pas déjà
+        if (!item.classList.contains('active')) {
+             item.classList.add('active');
+             // Charger les données si nécessaire (peut être redondant si checkTunnel est appelé dans showTab)
+             if (!item.hasAttribute('data-loaded')) {
+                // console.log('checkTunnel called');
+                checkTunnel(tunnelId);
+                item.setAttribute('data-loaded', 'true');
+             }
         }
+        // 2. Afficher l'onglet 'settings'
+        showTab('settings');
+        // console.log('Bandwidth info clicked, showing settings tab');
     });
     
-    checkBtn.addEventListener('click', () => checkTunnel(tunnelId));
     startBtn.addEventListener('click', () => startTunnel(tunnelId));
     stopBtn.addEventListener('click', () => stopTunnel(tunnelId));
     restartBtn.addEventListener('click', () => restartTunnel(tunnelId));
@@ -428,11 +552,13 @@ function setupTunnelEvents(item, tunnelId) {
     const downValue = item.querySelector('.down-value');
     
     upBandwidth.addEventListener('input', () => {
-        upValue.textContent = `${upBandwidth.value} Kbps`;
+        const logValue = linearToLog(upBandwidth.value, 0, 10000);
+        upValue.textContent = `${Math.round(logValue)} Kbps`;
     });
     
     downBandwidth.addEventListener('input', () => {
-        downValue.textContent = `${downBandwidth.value} Kbps`;
+        const logValue = linearToLog(downBandwidth.value, 0, 10000);
+        downValue.textContent = `${Math.round(logValue)} Kbps`;
     });
     
     portTypeSelect.addEventListener('change', () => {
@@ -496,18 +622,65 @@ function setupTunnelEvents(item, tunnelId) {
         addChannelForm.style.display = 'none';
         portForwardForm.reset();
     });
+
+    item.addEventListener('click', (e) => {
+        // Vérifier si le clic (ou un de ses parents proches) est un bouton de suppression de channel
+        const removeButton = e.target.closest('.remove-channel-btn');
+    
+        if (removeButton) {
+            // Empêcher le clic de déclencher d'autres handlers (ex: déplier/replier le tunnel)
+            e.stopPropagation();
+    
+            const type = removeButton.dataset.type;
+            const port = removeButton.dataset.port;
+    
+            if (type && port) {
+                // --- Confirmation avant suppression ---
+                const confirmModal = document.getElementById('confirmModal');
+                const confirmMessage = document.getElementById('confirmMessage');
+                const acceptConfirm = document.getElementById('acceptConfirm');
+                const cancelBtn = document.getElementById('cancelConfirm'); // Obtenir le bouton Annuler
+    
+                confirmMessage.textContent = `Voulez-vous vraiment supprimer le channel ${type} ${port} du tunnel ${tunnelId} ?`;
+    
+                // Définir une fonction de handler temporaire pour éviter les liaisons multiples
+                const confirmHandler = () => {
+                    // console.log(`Confirmed removal for tunnel ${tunnelId}, type ${type}, port ${port}`);
+                    removePortForward(tunnelId, type, port);
+                    confirmModal.style.display = 'none';
+                    acceptConfirm.removeEventListener('click', confirmHandler); // Nettoyer l'écouteur
+                };
+    
+                 // Nettoyer tout écouteur précédent sur Accepter avant d'en ajouter un nouveau
+                acceptConfirm.replaceWith(acceptConfirm.cloneNode(true));
+                document.getElementById('acceptConfirm').addEventListener('click', confirmHandler);
+    
+    
+                 // Gérer le bouton Annuler (nettoyer aussi l'écouteur de confirmation)
+                 // Utiliser replaceWith pour être sûr de supprimer les anciens listeners sur Annuler aussi
+                cancelBtn.replaceWith(cancelBtn.cloneNode(true));
+                document.getElementById('cancelConfirm').addEventListener('click', () => {
+                    confirmModal.style.display = 'none';
+                    // Pas besoin de removeEventListener ici car on remplace le bouton Accepter
+                });
+    
+    
+                confirmModal.style.display = 'flex'; // Afficher la modale
+                // --- Fin Confirmation ---
+    
+            } else {
+                console.error("Attributs data-type ou data-port manquants sur le bouton de suppression.", removeButton);
+                showNotification("Erreur: Impossible d'identifier le channel à supprimer.", 'error');
+            }
+        }
+    
+        // Vous pouvez ajouter d'autres vérifications pour d'autres boutons dynamiques ici si besoin
+        // else if (e.target.closest('.autre-bouton-dynamique')) { ... }
+    });
     
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
             showTab(tab.dataset.tab);
-        });
-    });
-    
-    item.querySelectorAll('.remove-channel-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const type = btn.dataset.type;
-            const port = btn.dataset.port;
-            removePortForward(tunnelId, type, port);
         });
     });
 }
@@ -530,10 +703,10 @@ function setupViewToggle() {
 function setupGlobalEvents() {
     startAllBtn.addEventListener('click', () => startTunnel());
     stopAllBtn.addEventListener('click', () => stopTunnel());
-    refreshBtn.addEventListener('click', () => {
-        showNotification('Mise à jour des tunnels...', 'info');
-        fetchTunnels();
-    });
+    // refreshBtn.addEventListener('click', () => {
+    //     showNotification('Mise à jour des tunnels...', 'info');
+    //     fetchTunnels();
+    // });
     
     addTunnelBtn.addEventListener('click', () => {
         addTunnelModal.style.display = 'flex';

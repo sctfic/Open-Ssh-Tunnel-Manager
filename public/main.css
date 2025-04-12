@@ -123,22 +123,22 @@ header {
 }
 
 .btn-sm {
-    padding: 6px 12px;
+    padding: 6px 8px;
     font-size: 12px;
 }
 
 /* Dashboard Stats */
 .dashboard-stats {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 15px;
-    margin-bottom: 20px;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 10px;
+    margin-bottom: 10px;
 }
 
 .stat-card {
     background-color: white;
     border-radius: 8px;
-    padding: 15px;
+    padding: 8px 12px;
     display: flex;
     align-items: center;
     box-shadow: 0 2px 5px var(--shadow);
@@ -156,6 +156,9 @@ header {
 
 .stat-icon.inactive {
     color: var(--danger);
+}
+.stat-icon.orphan {
+    color: var(--warning);
 }
 
 .stat-content {
@@ -224,20 +227,78 @@ header {
     justify-content: center;
     gap: 10px;
 }
+/* main.css (only changed sections shown) */
 
 /* Tunnel Item */
-/* main.css (only changed sections shown for brevity) */
 .tunnel-item {
     background-color: white;
     border-radius: 8px;
     box-shadow: 0 2px 5px var(--shadow);
-    margin-bottom: 15px;
+    margin-bottom: 10px;
     transition: all 0.3s;
 }
 
 .tunnel-item[data-status="orphan"] {
-    background-color: #f7f7f7;
-    opacity: 0.8;
+    background-color: #e8ecef; /* More noticeable gray */
+    opacity: 0.7; /* Slightly more faded */
+    color: #7f8c8d; /* Gray text for better contrast */
+}
+
+/* Bandwidth Controls */
+.bandwidth-control {
+    flex: 1;
+    min-width: 200px;
+}
+
+.bandwidth-control label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 10px;
+    font-size: 14px;
+}
+
+.slider-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.slider {
+    flex: 1;
+    height: 5px;
+    background-color: var(--light);
+    border-radius: 5px;
+    appearance: none;
+    outline: none;
+}
+
+.slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: var(--primary);
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.slider::-webkit-slider-thumb:hover {
+    background: darken(var(--primary), 10%);
+}
+
+.bandwidth-info {
+    font-size: 12px;
+    color: #7f8c8d;
+    min-width: 180px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.bandwidth-info:hover {
+    color: var(--primary);
 }
 
 .dropdown-menu {
@@ -251,16 +312,6 @@ header {
     box-shadow: 0 2px 5px var(--shadow);
     z-index: 200; /* Increased to appear above other elements */
     min-width: 150px;
-}
-
-.status-indicator {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    margin-right: 5px;
-    font-size: 12px;
 }
 
 .status-running {
@@ -306,9 +357,25 @@ header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 15px;
+    padding: 10px;
     cursor: pointer;
     border-bottom: 1px solid var(--light);
+    position: relative;
+}
+/* Style pour le nouvel indicateur */
+.expand-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 10px; /* Espace entre l'indicateur et le reste */
+    color: #7f8c8d; /* Couleur discrète */
+    transition: transform 0.3s ease-in-out; /* Animation de rotation */
+    font-size: 14px; /* Ajustez si nécessaire */
+}
+
+/* Rotation quand le tunnel est actif/déplié */
+.tunnel-item.active .expand-indicator {
+    transform: rotate(90deg);
 }
 
 .tunnel-id {
@@ -316,7 +383,24 @@ header {
     align-items: center;
     font-weight: bold;
     gap: 10px;
+    flex-grow: 1; /* Pour occuper l'espace disponible */
 }
+
+/* Assurez-vous que les actions ne prennent pas trop de place */
+.tunnel-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    /* margin-left: 12px; */
+    /* padding-right: 12px; */
+    flex-shrink: 0; /* Empêche le rétrécissement */
+}
+
+/* Styles pour la vue compacte si l'indicateur doit disparaître */
+.tunnel-list.compact-view .expand-indicator {
+    display: none;
+}
+
 
 .tunnel-name {
     font-size: 16px;
@@ -346,40 +430,118 @@ header {
     align-items: center;
     gap: 5px;
 }
-
-.bandwidth-info {
-    font-size: 12px;
-    color: #7f8c8d;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
+/* Base pour tous les indicateurs */
 .status-indicator {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    margin-right: 5px;
+    display: inline-block; /* Changé pour inline-block */
+    width: 20px;           /* Taille du cercle */
+    height: 20px;
+    border-radius: 50%;    /* Pour faire un cercle */
+    position: relative;    /* Pour positionner les pseudo-éléments */
+    vertical-align: middle; /* Meilleur alignement vertical avec le texte */
+    margin-right: 8px;
+    overflow: hidden;      /* Cache ce qui dépasse si besoin */
 }
 
+/* Style commun pour les marques (coche/croix) */
+.status-indicator::before,
+.status-indicator::after {
+    content: '';
+    position: absolute;
+    background-color: white; /* Couleur de la marque */
+    border-radius: 2px;     /* Coins légèrement arrondis pour la marque */
+}
+
+/* --- Indicateur RUNNING (Coche verte animée) --- */
 .status-running {
     background-color: var(--success);
+    animation: pulse-green 1.5s infinite ease-in-out; /* Légère pulsation */
 }
 
+/* Partie courte de la coche */
+.status-running::before {
+    width: 3px;
+    height: 11px;
+    left: 8px; /* Positionnement */
+    top: 8px;
+    transform: rotate(-45deg);
+    transform-origin: left bottom;
+    animation: draw-check-short 0.3s ease-out forwards; /* Animation de dessin */
+}
+
+/* Partie longue de la coche */
+.status-running::after {
+    width: 3px;
+    height: 19px; /* Plus long */
+    left: 16px;  /* Positionnement */
+    top: 5px;
+    transform: rotate(45deg);
+    transform-origin: left top;
+    animation: draw-check-long .3s .1s ease-out forwards; /* Animation décalée */
+}
+
+/* --- Indicateur STOPPED (Croix rouge) --- */
 .status-stopped {
     background-color: var(--danger);
 }
 
+/* Barre 1 de la croix */
+.status-stopped::before {
+    width: 2px; /* Un peu plus fin */
+    height: 12px;
+    left: 9px; /* Centré */
+    top: 4px;
+    transform: rotate(45deg);
+}
+
+/* Barre 2 de la croix */
+.status-stopped::after {
+    width: 2px;
+    height: 12px;
+    left: 9px; /* Centré */
+    top: 4px;
+    transform: rotate(-45deg);
+}
+
+/* --- Indicateur ORPHAN (Point d'exclamation jaune) --- */
 .status-orphan {
-    background-color: var(--warning);
+    background-color: var(--warning); /* Jaune pour avertissement */
 }
 
-.tunnel-actions {
-    display: flex;
-    gap: 10px;
-    align-items: center;
+ /* Barre verticale du '!' */
+.status-orphan::before {
+    width: 4px;
+    height: 10px;
+    left: 8px; /* Centré */
+    top: 2px;   /* Haut */
+    background-color: #333; /* Couleur sombre pour '!' */
 }
 
+/* Point du '!' */
+.status-orphan::after {
+    width: 4px;
+    height: 4px;
+    left: 8px; /* Centré */
+    top: 14px;  /* Bas */
+     background-color: #333; /* Couleur sombre pour '!' */
+     border-radius: 50%; /* Rond */
+}
+
+/* --- Animations --- */
+@keyframes pulse-green {
+    0% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.7); } /* Vert succès */
+    70% { box-shadow: 0 0 0 6px rgba(46, 204, 113, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0); }
+}
+
+@keyframes draw-check-short {
+    0% { height: 0; }
+    100% { height: 9px; }
+}
+
+ @keyframes draw-check-long {
+    0% { height: 0; }
+    100% { height: 13px; }
+}
 .action-dropdown {
     position: relative;
 }
@@ -518,7 +680,8 @@ header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 10px;
+    margin-bottom: 2px;
+    margin-left: 30px;
 }
 
 .channels-list {
@@ -529,8 +692,17 @@ header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px;
+    padding: 4px;
+    margin-left: 50px;
     border-bottom: 1px solid var(--light);
+}
+.channel-item:hover {
+    background-color: var(--light);
+}
+
+.channel-item .status-error::before {
+    content: "\f071";
+    color: var(--danger);
 }
 
 .channel-info {
@@ -538,14 +710,44 @@ header {
     align-items: center;
     gap: 10px;
 }
-
 .channel-type {
-    background-color: var(--dark);
-    color: white;
-    padding: 3px 6px;
-    border-radius: 4px;
-    font-size: 12px;
+    display: inline-flex;   /* Pour bien aligner l'icône */
+    align-items: center;    /* Centrage vertical */
+    justify-content: center; /* Centrage horizontal */
+    width: 1.2em;           /* Donner une taille fixe au conteneur */
+    height: 1.2em;
+    font-size: 1em;         /* Taille de base de l'icône (peut être ajustée) */
+    margin-right: 8px;
+    vertical-align: middle;
+    color: var(--dark);     /* Couleur de l'icône */
+    transition: transform 0.3s ease; /* Transition douce pour la rotation */
 }
+
+/* Appliquer les rotations basées sur la classe de type */
+.channel-type-L { /* fa-right-long */
+    transform: rotate(-45deg);
+}
+
+.channel-type-R { /* fa-left-long */
+    transform: rotate(-45deg);
+}
+
+.channel-type-D { /* fa-arrows-left-right */
+    transform: rotate(-45deg);
+}
+
+/* Rappel : Les classes .fa-light, .fa-right-long, etc. sont ajoutées par JS. */
+/* Ces styles ne font qu'appliquer la rotation à la classe de contexte ajoutée. */
+
+/* Styles spécifiques si l'icône fa-light n'est pas disponible (fallback) */
+/* Vous pouvez décommenter et ajuster si fa-light ne fonctionne pas */
+
+/* .channel-type.fa-right-long::before,
+.channel-type.fa-left-long::before,
+.channel-type.fa-arrows-left-right::before {
+    font-weight: 900;
+} */
+
 
 .channel-details {
     font-size: 12px;
@@ -571,47 +773,6 @@ header {
     flex-wrap: wrap;
 }
 
-.bandwidth-control {
-    flex: 1;
-    min-width: 200px;
-}
-
-.bandwidth-control label {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    margin-bottom: 10px;
-    font-size: 14px;
-}
-
-.slider-container {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.slider {
-    flex: 1;
-    height: 5px;
-    background-color: var(--light);
-    border-radius: 5px;
-    appearance: none;
-    outline: none;
-}
-
-.slider::-webkit-slider-thumb {
-    appearance: none;
-    width: 15px;
-    height: 15px;
-    border-radius: 50%;
-    background: var(--primary);
-    cursor: pointer;
-    transition: all 0.3s;
-}
-
-.slider::-webkit-slider-thumb:hover {
-    background: darken(var(--primary), 10%);
-}
 
 .slider-value {
     font-size: 12px;
@@ -892,10 +1053,6 @@ header {
 
 .tunnel-list.compact-view .tunnel-actions {
     gap: 5px;
-}
-
-.tunnel-list.compact-view .toggle-btn {
-    display: none;
 }
 
 /* Responsive Design */

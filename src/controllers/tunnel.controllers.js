@@ -180,7 +180,7 @@ exports.startTunnel = async (req, res) => {
     // Construire la réponse finale
     const response = {
         success: tunnels.every(tunnel => tunnel.success), // Vrai si tous les tunnels ont réussi
-        message: "Tous les tunnels ont été demarré.",
+        message: tunnels.count > 1 ? "Tous les tunnel(s) ont été demarré." : tunnels[0].message,
         tunnels: tunnels
     };
     return res.status(200).json(response);
@@ -251,7 +251,7 @@ exports.stopTunnel = async (req, res) => {
 
         return res.status(200).json({
             success: result.every(tunnel => tunnel.success),
-            message: "Tous les tunnels ont été arrêtés.",
+            message: result.count > 1 ? "Tous les tunnel(s) ont été arrêtés." : result[0].message,
             tunnels: result
         });
     } catch (error) {
@@ -284,6 +284,8 @@ const restartSingleTunnel = (id) => {
         }
         result = startSingleTunnel(id);
         result.success = (pid!=result.pid && result.pid!=null);
+    console.log(result);
+
     } catch (error) {
         result = {
             success: false,
@@ -322,7 +324,7 @@ exports.restartTunnel = async (req, res) => {
 
         return res.status(200).json({
             success: result.every(tunnel => tunnel.success),
-            message: "Tous les tunnels ont été redémarrés.",
+            message: result.count > 1 ? "Tous les tunnel(s) ont été redémarrés." : result[0].message,
             tunnels: result
         });
     } catch (error) {
@@ -341,7 +343,7 @@ exports.getStatus = async (req, res) => {
     // Fonction pour lister tous les processus autossh en cours
     const getRunningAutosshProcesses = () => {
         try {
-            const output = execSync("ps -ef | grep autossh | grep ostm_user | grep -v grep", { encoding: 'utf-8' });
+            const output = execSync("ps -ef | grep autossh | grep : | grep -v grep", { encoding: 'utf-8' });
             return output.split('\n')
                 .filter(line => line.trim())
                 .map(line => {
@@ -367,7 +369,7 @@ exports.getStatus = async (req, res) => {
             options: config.options,
             channels: config.channels,
             bandwidth: config.bandwidth,
-            pid: pid || null,
+            pid: pid*1 || null,
             cmd: (managedProcess?.cmd) || null,
             status: managedProcess ? "running" : "stopped",
             message: managedProcess ? "Tunnel en cour d'execution" : "Tunnel arreté",
@@ -388,13 +390,13 @@ exports.getStatus = async (req, res) => {
 
         // Tunnels non configurés (orphelins)
         const unmanagedTunnels = runningProcesses
-            .filter(p => !configuredTunnels.some(t => t.pid === p.pid))
+            .filter(p => !configuredTunnels.some(t => t.pid == p.pid))
             .map(p => ({
-                success: null,
+                success: true,
                 id: null,
                 pid: p.pid,
                 cmd: p.cmd,
-                status: "orphelin",
+                status: "orphan",
                 message: "Processus orphelin non géré"
             }));
 

@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OSTM - SSH Tunnel Manager</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>OSTM - Open SSH Tunnel Manager</title>
+    <link rel="stylesheet" href="all.css">
     <style>@import url("main.css");</style>
 </head>
 <body>
@@ -12,23 +12,23 @@
         <!-- Header -->
         <header>
             <div class="header-title">
-                <h1><i class="fas fa-network-wired"></i> SSH Tunnel Manager</h1>
+                <h1><i class="fas fa-network-wired"></i> Open SSH Tunnel Manager</h1>
                 <p class="subtitle">Gestionnaire de tunnels SSH en ligne</p>
             </div>
             <div class="header-actions">
-                <button id="addTunnelBtn" class="btn btn-success" title="Ajouter un nouveau tunnel">
+                <button id="addTunnelBtn" class="btn btn-primary" title="Ajouter un nouveau tunnel">
                     <i class="fas fa-plus"></i> Nouveau tunnel
                 </button>
                 <div class="btn-group">
-                    <button id="startAllBtn" class="btn btn-primary" title="Démarrer tous les tunnels">
+                    <button id="startAllBtn" class="btn btn-success" title="Démarrer tous les tunnels">
                         <i class="fas fa-play"></i> Tout démarrer
                     </button>
                     <button id="stopAllBtn" class="btn btn-danger" title="Arrêter tous les tunnels">
                         <i class="fas fa-stop"></i> Tout arrêter
                     </button>
-                    <button id="refreshBtn" class="btn btn-primary" title="Rafraîchir la liste">
+                    <!-- <button id="refreshBtn" class="btn btn-primary" title="Rafraîchir la liste">
                         <i class="fas fa-sync-alt"></i> Rafraîchir
-                    </button>
+                    </button> -->
                 </div>
                 <!-- View Toggle Buttons -->
                 <div class="view-toggle">
@@ -38,9 +38,9 @@
                     <button class="btn btn-primary view-btn" data-view="grid" title="Vue en grille">
                         <i class="fas fa-th"></i>
                     </button>
-                    <button class="btn btn-primary view-btn" data-view="compact" title="Vue compacte">
+                    <!-- <button class="btn btn-primary view-btn" data-view="compact" title="Vue compacte">
                         <i class="fas fa-align-justify"></i>
-                    </button>
+                    </button> -->
                 </div>
             </div>
         </header>
@@ -55,17 +55,24 @@
                 </div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon active"><i class="fas fa-play-circle"></i></div>
+                <div class="stat-icon active"><span class="status-indicator status-running"></span></div>
                 <div class="stat-content">
                     <div class="stat-value" id="activeTunnels">0</div>
                     <div class="stat-label">Actifs</div>
                 </div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon inactive"><i class="fas fa-stop-circle"></i></div>
+                <div class="stat-icon inactive"><span class="status-indicator status-stopped"></span></div>
                 <div class="stat-content">
                     <div class="stat-value" id="inactiveTunnels">0</div>
                     <div class="stat-label">Inactifs</div>
+                </div>
+            </div>
+            <div class="stat-card" id="orphanTunnelsCard" style="display: none;">
+                <div class="stat-icon orphan"><i class="fas fa-unlink"></i></div> <!-- ou fa-question-circle -->
+                <div class="stat-content">
+                    <div class="stat-value" id="orphanTunnels">0</div>
+                    <div class="stat-label">Orphelins</div>
                 </div>
             </div>
             <div class="stat-card">
@@ -105,7 +112,11 @@
 <template id="tunnelItemTemplate">
     <li class="tunnel-item" data-tunnel-id="">
         <div class="tunnel-header">
+
             <div class="tunnel-id">
+                <span class="expand-indicator">
+                    <i class="fas fa-chevron-right"></i>
+                </span>
                 <span class="status-indicator"></span>
                 <span class="tunnel-name"></span>
                 <span class="tunnel-ip badge"></span>
@@ -115,20 +126,16 @@
                     <i class="fas fa-exchange-alt"></i> <span class="count">0</span>
                 </span>
                 <span class="bandwidth-info">
-                    <i class="fas fa-arrow-up"></i> <span class="up-speed">0</span> Ko/s
-                    <i class="fas fa-arrow-down"></i> <span class="down-speed">0</span> Ko/s
+                    <i class="fas fa-arrow-up"></i> <span class="up-speed">0</span>Ko/s
+                    <i class="fas fa-arrow-down"></i> <span class="down-speed">0</span>Ko/s
                 </span>
             </div>
             <div class="tunnel-actions">
-                <button class="btn btn-sm btn-primary toggle-btn" title="Afficher/Masquer les détails">
-                    <i class="fas fa-chevron-down"></i>
-                </button>
                 <div class="action-dropdown">
                     <button class="btn btn-sm btn-secondary dropdown-toggle" title="Plus d'actions">
                         <i class="fas fa-ellipsis-v"></i>
                     </button>
                     <div class="dropdown-menu">
-                        <button class="check-btn"><i class="fas fa-sync-alt"></i> Vérifier</button>
                         <button class="start-btn"><i class="fas fa-play"></i> Démarrer</button>
                         <button class="stop-btn"><i class="fas fa-stop"></i> Arrêter</button>
                         <button class="restart-btn"><i class="fas fa-redo"></i> Redémarrer</button>
@@ -148,7 +155,7 @@
             <!-- Channels Tab -->
             <div class="tab-content" id="channels-tab">
                 <div class="channels-header">
-                    <h3>Channels configurés</h3>
+                    <h4>Channels définis</h4>
                     <button class="btn btn-sm btn-success add-channel-toggle" title="Ajouter un nouveau channel">
                         <i class="fas fa-plus"></i> Ajouter un channel
                     </button>
@@ -223,9 +230,11 @@
                         <div class="info-label">PID</div>
                         <div class="info-value tunnel-pid-value"></div>
                     </div>
-                    <div class="info-item">
+                </div>
+                <div class="tunnel-info-grid">
+                    <div class="info-item"><br/>
                         <div class="info-label">Commande</div>
-                        <div class="info-value tunnel-cmd-value" title=""></div>
+                        <div class="info-value tunnel-cmd-value"></div>
                     </div>
                 </div>
             </div>
@@ -237,6 +246,7 @@
                     <div class="bandwidth-controls">
                         <div class="bandwidth-control">
                             <label>
+                                <!-- <i class="fa-duotone fa-solid fa-up-right-and-down-left-from-center"></i> -->
                                 <i class="fas fa-arrow-up"></i> Upload (Ko/s)
                                 <span class="up-value">- Ko/s</span>
                             </label>
@@ -246,6 +256,7 @@
                         </div>
                         <div class="bandwidth-control">
                             <label>
+                                <!-- <i class="fa-duotone fa-solid fa-up-right-and-down-left-from-center"></i> -->
                                 <i class="fas fa-arrow-down"></i> Download (Ko/s)
                                 <span class="down-value">- Ko/s</span>
                             </label>
@@ -267,14 +278,13 @@
     <template id="channelItemTemplate">
         <li class="channel-item">
             <div class="channel-info">
-                <span class="channel-type"></span>
                 <span class="status-indicator"></span>
                 <strong class="channel-name"></strong>
-                <span class="channel-details"></span>
+                <span class="channel-details"><span class="channel-type"></span></span>
             </div>
             <div class="channel-actions">
                 <button class="btn btn-sm btn-danger remove-channel-btn" title="Supprimer ce channel">
-                    <i class="fas fa-times"></i>
+                    <i class="fas fa-trash"></i>
                 </button>
             </div>
         </li>
@@ -293,21 +303,27 @@
                         <label for="configName">
                             <i class="fas fa-tag"></i> Nom de la configuration
                         </label>
-                        <input type="text" id="configName" name="configName" placeholder="ex: srv-prod" required pattern="[a-zA-Z0-9\-]+" title="Lettres, chiffres et tirets uniquement">
+                        <input type="text" id="configName" name="configName" required
+                            placeholder="ex: srv-prod"
+                            pattern="[a-zA-Z0-9\-]+" title="Lettres, chiffres et tirets uniquement">
                         <small>Nom unique pour identifier le tunnel</small>
                     </div>
                     <div class="form-group">
                         <label for="ip">
                             <i class="fas fa-network-wired"></i> Adresse IP du serveur
                         </label>
-                        <input type="text" id="ip" name="ip" placeholder="ex: 192.168.1.100" required pattern="^((\d{1,3}\.){3}\d{1,3}|([a-zA-Z0-9\-]+\.)+[a-zA-Z]{2,})$" title="Adresse IP ou nom de domaine valide">
+                        <input type="text" id="ip" name="ip" required
+                            placeholder="ex: 192.168.1.100"
+                            pattern="^(localhost|((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}|(([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}))$"
+                            title="Adresse IP ou nom de domaine valide">
                         <small>IP ou domaine du serveur SSH</small>
                     </div>
                     <div class="form-group">
                         <label for="adminUser">
                             <i class="fas fa-user"></i> Nom d'utilisateur
                         </label>
-                        <input type="text" id="adminUser" name="adminUser" placeholder="ex: admin" required>
+                        <input type="text" id="adminUser" name="adminUser" required
+                            placeholder="ex: admin">
                         <small>Utilisateur pour la connexion SSH</small>
                     </div>
                     <div class="form-group">

@@ -9,7 +9,7 @@ describe('Tunnel Service', () => {
   describe('removePortForward', () => {
     test('devrait supprimer un port existant', async () => {
       readTunnelsConfig.mockReturnValue({
-        tunnels: { '-L': { '9101': {} } }
+        channels: { '-L': { '9101': {} } }
       });
 
       const result = await tunnelService.removePortForward('test', '-L', '9101');
