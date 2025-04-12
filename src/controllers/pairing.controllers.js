@@ -67,7 +67,7 @@ function pairingServer(ip, ostm_user, ostm_userPass, configName = 'test') {
                     ServerAliveCountMax: 3
                 },
                 bandwidth: { up: 200, down: 200 },
-                tunnels: {
+                channels: {
                     '-L': {},
                     '-R': {},
                     '-D': {}

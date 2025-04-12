@@ -1,6 +1,8 @@
+const { logTrace } = require("./tools");
+
 // Function to build the command based on the configuration
 function buildCmd(config) {
-    const { user, ip, ssh_port, ssh_key, options, bandwidth, tunnels } = config;
+    const { user, ip, ssh_port, ssh_key, options, bandwidth, channels } = config;
     let cmd = `trickle -s -u ${bandwidth.up} -d ${bandwidth.down} autossh -M 0 -f -N -i ${ssh_key} -p ${ssh_port} `;
 
     // Add options
@@ -9,17 +11,17 @@ function buildCmd(config) {
             cmd += `-o ${key}=${value} `;
         }
     }
-
-    // Add tunnels
-    for (const [type, tunnelGroup] of Object.entries(tunnels)) {
-        for (const [port, tunnel] of Object.entries(tunnelGroup)) {
+    // Add channels
+    for (const [type, channelGroup] of Object.entries(channels)) {
+        for (const [port, channel] of Object.entries(channelGroup)) {
             if (type === "-L") {
-                cmd += `${type} ${tunnel.listen_port}:${tunnel.endpoint_host}:${tunnel.endpoint_port} `;
+                cmd += `${type} ${channel.listen_port}:${channel.endpoint_host}:${channel.endpoint_port} `;
             } else if (type === "-R") {
-                cmd += `${type} ${tunnel.listen_host}:${tunnel.listen_port}:${tunnel.endpoint_host}:${tunnel.endpoint_port} `;
+                cmd += `${type} ${channel.listen_host}:${channel.listen_port}:${channel.endpoint_host}:${channel.endpoint_port} `;
             } else if (type === "-D") {
-                cmd += `${type} ${tunnel.listen_port} `;
+                cmd += `${type} ${channel.listen_port} `;
             }
+            // logTrace("channel", `${type} ${channel.listen_host}:${channel.listen_port}:${channel.endpoint_host}:${channel.endpoint_port}`);
         }
     }
 

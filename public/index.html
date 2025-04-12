@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSTM - SSH Tunnel Manager</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>@import url("main.css");</style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <div class="header-title">
+                <h1><i class="fas fa-network-wired"></i> SSH Tunnel Manager</h1>
+                <p class="subtitle">Gestionnaire de tunnels SSH en ligne</p>
+            </div>
+            <div class="header-actions">
+                <button id="addTunnelBtn" class="btn btn-success" title="Ajouter un nouveau tunnel">
+                    <i class="fas fa-plus"></i> Nouveau tunnel
+                </button>
+                <div class="btn-group">
+                    <button id="startAllBtn" class="btn btn-primary" title="Démarrer tous les tunnels">
+                        <i class="fas fa-play"></i> Tout démarrer
+                    </button>
+                    <button id="stopAllBtn" class="btn btn-danger" title="Arrêter tous les tunnels">
+                        <i class="fas fa-stop"></i> Tout arrêter
+                    </button>
+                    <button id="refreshBtn" class="btn btn-primary" title="Rafraîchir la liste">
+                        <i class="fas fa-sync-alt"></i> Rafraîchir
+                    </button>
+                </div>
+                <!-- View Toggle Buttons -->
+                <div class="view-toggle">
+                    <button class="btn btn-primary view-btn active" data-view="list" title="Vue en liste">
+                        <i class="fas fa-list"></i>
+                    </button>
+                    <button class="btn btn-primary view-btn" data-view="grid" title="Vue en grille">
+                        <i class="fas fa-th"></i>
+                    </button>
+                    <button class="btn btn-primary view-btn" data-view="compact" title="Vue compacte">
+                        <i class="fas fa-align-justify"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Dashboard Stats -->
+        <div class="dashboard-stats">
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-server"></i></div>
+                <div class="stat-content">
+                    <div class="stat-value" id="totalTunnels">0</div>
+                    <div class="stat-label">Tunnels</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon active"><i class="fas fa-play-circle"></i></div>
+                <div class="stat-content">
+                    <div class="stat-value" id="activeTunnels">0</div>
+                    <div class="stat-label">Actifs</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon inactive"><i class="fas fa-stop-circle"></i></div>
+                <div class="stat-content">
+                    <div class="stat-value" id="inactiveTunnels">0</div>
+                    <div class="stat-label">Inactifs</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-project-diagram"></i></div>
+                <div class="stat-content">
+                    <div class="stat-value" id="totalChannels">0</div>
+                    <div class="stat-label">Channels</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search and Filter -->
+        <div class="search-filter">
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" id="searchTunnel" placeholder="Rechercher par nom ou IP...">
+            </div>
+            <div class="filter-options">
+                <select id="statusFilter">
+                    <option value="all">Tous les statuts</option>
+                    <option value="running">Actifs</option>
+                    <option value="stopped">Inactifs</option>
+                    <option value="orphan">Orphelins</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Tunnel List -->
+        <ul id="tunnelList" class="tunnel-list list-view">
+            <li class="tunnel-empty">
+                <i class="fas fa-info-circle"></i> Aucun tunnel trouvé. Cliquez sur "Nouveau tunnel" pour commencer.
+            </li>
+        </ul>
+    </div>
+
+    <!-- Tunnel Item Template -->
+<template id="tunnelItemTemplate">
+    <li class="tunnel-item" data-tunnel-id="">
+        <div class="tunnel-header">
+            <div class="tunnel-id">
+                <span class="status-indicator"></span>
+                <span class="tunnel-name"></span>
+                <span class="tunnel-ip badge"></span>
+            </div>
+            <div class="tunnel-summary">
+                <span class="channels-count badge">
+                    <i class="fas fa-exchange-alt"></i> <span class="count">0</span>
+                </span>
+                <span class="bandwidth-info">
+                    <i class="fas fa-arrow-up"></i> <span class="up-speed">0</span> Ko/s
+                    <i class="fas fa-arrow-down"></i> <span class="down-speed">0</span> Ko/s
+                </span>
+            </div>
+            <div class="tunnel-actions">
+                <button class="btn btn-sm btn-primary toggle-btn" title="Afficher/Masquer les détails">
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                <div class="action-dropdown">
+                    <button class="btn btn-sm btn-secondary dropdown-toggle" title="Plus d'actions">
+                        <i class="fas fa-ellipsis-v"></i>
+                    </button>
+                    <div class="dropdown-menu">
+                        <button class="check-btn"><i class="fas fa-sync-alt"></i> Vérifier</button>
+                        <button class="start-btn"><i class="fas fa-play"></i> Démarrer</button>
+                        <button class="stop-btn"><i class="fas fa-stop"></i> Arrêter</button>
+                        <button class="restart-btn"><i class="fas fa-redo"></i> Redémarrer</button>
+                        <div class="dropdown-divider"></div>
+                        <button class="remove-btn"><i class="fas fa-trash"></i> Supprimer</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="tunnel-content">
+            <div class="tunnel-tabs">
+                <button class="tab-btn active" data-tab="channels">Channels</button>
+                <button class="tab-btn" data-tab="details">Détails</button>
+                <button class="tab-btn" data-tab="settings">Paramètres</button>
+            </div>
+
+            <!-- Channels Tab -->
+            <div class="tab-content" id="channels-tab">
+                <div class="channels-header">
+                    <h3>Channels configurés</h3>
+                    <button class="btn btn-sm btn-success add-channel-toggle" title="Ajouter un nouveau channel">
+                        <i class="fas fa-plus"></i> Ajouter un channel
+                    </button>
+                </div>
+                <ul class="channels-list">
+                    <li class="channel-empty">Aucun channel configuré.</li>
+                </ul>
+                <div class="add-channel-form" style="display: none;">
+                    <h4>Ajouter un port forward</h4>
+                    <form class="port-forward-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="port-type">Type</label>
+                                <div class="select-wrapper">
+                                    <select id="port-type" class="port-type">
+                                        <option value="-L">Local (-L)</option>
+                                        <option value="-R">Remote (-R)</option>
+                                        <option value="-D">Dynamic (-D)</option>
+                                    </select>
+                                    <i class="fas fa-chevron-down"></i>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="port-name">Nom</label>
+                                <input type="text" id="port-name" class="port-name" placeholder="ex: printer1" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="listen-port">Port d'écoute</label>
+                                <input type="number" id="listen-port" class="listen-port" placeholder="ex: 9101" min="1" max="65535" required>
+                            </div>
+                        </div>
+                        <div class="form-row listen-host-row" style="display: none;">
+                            <div class="form-group">
+                                <label for="listen-host">Hôte d'écoute</label>
+                                <input type="text" id="listen-host" class="listen-host" placeholder="ex: localhost">
+                            </div>
+                        </div>
+                        <div class="form-row endpoint-row">
+                            <div class="form-group">
+                                <label for="endpoint-host">Hôte destination</label>
+                                <input type="text" id="endpoint-host" class="endpoint-host" placeholder="ex: 127.0.0.1">
+                            </div>
+                            <div class="form-group">
+                                <label for="endpoint-port">Port destination</label>
+                                <input type="number" id="endpoint-port" class="endpoint-port" placeholder="ex: 9100" min="1" max="65535">
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-secondary cancel-add-channel">Annuler</button>
+                            <button type="submit" class="btn btn-primary">Ajouter</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Details Tab -->
+            <div class="tab-content hidden" id="details-tab">
+                <div class="tunnel-info-grid">
+                    <div class="info-item">
+                        <div class="info-label">Nom</div>
+                        <div class="info-value tunnel-name-value"></div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">IP Serveur</div>
+                        <div class="info-value tunnel-ip-value"></div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Statut</div>
+                        <div class="info-value tunnel-status-value"></div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">PID</div>
+                        <div class="info-value tunnel-pid-value"></div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Commande</div>
+                        <div class="info-value tunnel-cmd-value" title=""></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div class="tab-content hidden" id="settings-tab">
+                <div class="bandwidth-settings">
+                    <h3>Paramètres de bande passante</h3>
+                    <div class="bandwidth-controls">
+                        <div class="bandwidth-control">
+                            <label>
+                                <i class="fas fa-arrow-up"></i> Upload (Ko/s)
+                                <span class="up-value">- Ko/s</span>
+                            </label>
+                            <div class="slider-container">
+                                <input type="range" min="0" max="10000" value="-" class="slider up-bandwidth">
+                            </div>
+                        </div>
+                        <div class="bandwidth-control">
+                            <label>
+                                <i class="fas fa-arrow-down"></i> Download (Ko/s)
+                                <span class="down-value">- Ko/s</span>
+                            </label>
+                            <div class="slider-container">
+                                <input type="range" min="0" max="10000" value="-" class="slider down-bandwidth">
+                            </div>
+                        </div>
+                        <button class="btn btn-primary update-bandwidth-btn">
+                            <i class="fas fa-save"></i> Enregistrer
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </li>
+</template>
+
+    <!-- Channel Item Template -->
+    <template id="channelItemTemplate">
+        <li class="channel-item">
+            <div class="channel-info">
+                <span class="channel-type"></span>
+                <span class="status-indicator"></span>
+                <strong class="channel-name"></strong>
+                <span class="channel-details"></span>
+            </div>
+            <div class="channel-actions">
+                <button class="btn btn-sm btn-danger remove-channel-btn" title="Supprimer ce channel">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </li>
+    </template>
+
+    <!-- Add Tunnel Modal -->
+    <div id="addTunnelModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-plus-circle"></i> Nouveau tunnel SSH</h2>
+                <span class="close" title="Fermer">&times;</span>
+            </div>
+            <form id="pairingForm">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="configName">
+                            <i class="fas fa-tag"></i> Nom de la configuration
+                        </label>
+                        <input type="text" id="configName" name="configName" placeholder="ex: srv-prod" required pattern="[a-zA-Z0-9\-]+" title="Lettres, chiffres et tirets uniquement">
+                        <small>Nom unique pour identifier le tunnel</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="ip">
+                            <i class="fas fa-network-wired"></i> Adresse IP du serveur
+                        </label>
+                        <input type="text" id="ip" name="ip" placeholder="ex: 192.168.1.100" required pattern="^((\d{1,3}\.){3}\d{1,3}|([a-zA-Z0-9\-]+\.)+[a-zA-Z]{2,})$" title="Adresse IP ou nom de domaine valide">
+                        <small>IP ou domaine du serveur SSH</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="adminUser">
+                            <i class="fas fa-user"></i> Nom d'utilisateur
+                        </label>
+                        <input type="text" id="adminUser" name="adminUser" placeholder="ex: admin" required>
+                        <small>Utilisateur pour la connexion SSH</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="adminPass">
+                            <i class="fas fa-key"></i> Mot de passe ou clé
+                        </label>
+                        <div class="password-field">
+                            <input type="password" id="adminPass" name="adminPass" required>
+                            <button type="button" class="toggle-password" title="Afficher/Masquer le mot de passe">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                        <small>Mot de passe ou chemin de la clé privée</small>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary cancel-modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Créer le tunnel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmModal" class="modal">
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h3 id="confirmTitle"><i class="fas fa-exclamation-circle"></i> Confirmation</h3>
+                <span class="close" title="Fermer">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p id="confirmMessage">Êtes-vous sûr de vouloir effectuer cette action ?</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelConfirm">Annuler</button>
+                <button class="btn btn-primary" id="acceptConfirm">Confirmer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="spinner"></div>
+        <div class="loading-text">Chargement...</div>
+    </div>
+
+    <!-- Notification -->
+    <div id="notification" class="notification">
+        <i class="fas fa-check-circle notification-icon"></i>
+        <span class="notification-message"></span>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>

@@ -1,5 +1,7 @@
+const e = require('express');
 const { readTunnelsConfig, writeTunnelsConfig } = require('../utils/rwTunnelsConfig');
 const { logTrace } = require('../utils/tools');
+const net = require('net');
 
 /**
  * Ajoute un port de transfert à un tunnel existant
@@ -51,15 +53,15 @@ exports.addPortForward = async (tunnelId, portData) => {
         }
 
         // Vérifier si le tunnel existe déjà
-        if (!config.tunnels) {
-            config.tunnels = {};
+        if (!config.channels) {
+            config.channels = {};
         }
         
-        if (!config.tunnels[type]) {
-            config.tunnels[type] = {};
+        if (!config.channels[type]) {
+            config.channels[type] = {};
         }
         
-        if (config.tunnels[type][listen_port]) {
+        if (config.channels[type][listen_port]) {
             throw new Error(`Le port ${listen_port} est déjà configuré pour ce type de tunnel`);
         }
 
@@ -80,7 +82,7 @@ exports.addPortForward = async (tunnelId, portData) => {
         // Pour -D, on garde juste name et listen_port
 
         // Ajouter le port à la configuration
-        config.tunnels[type][listen_port] = portConfig;
+        config.channels[type][listen_port] = portConfig;
 
         // Sauvegarder la configuration
         const saved = writeTunnelsConfig(tunnelId, config);
@@ -92,7 +94,7 @@ exports.addPortForward = async (tunnelId, portData) => {
         return { 
             success: true, 
             tunnelId, 
-            config: config.tunnels[type][listen_port],
+            config: config.channels[type][listen_port],
             message: `Port ${listen_port} ajouté avec succès` 
         };
 
@@ -131,19 +133,19 @@ exports.removePortForward = async (tunnelId, type, port) => {
         }
 
         // Vérifier si le tunnel existe
-        if (!config.tunnels || !config.tunnels[type] || !config.tunnels[type][port]) {
+        if (!config.channels || !config.channels[type] || !config.channels[type][port]) {
             throw new Error(`Le port ${port} de type ${type} n'existe pas dans la configuration`);
         }
 
         // Stocker une copie du port avant la suppression pour le retourner
-        const removedPort = { ...config.tunnels[type][port] };
+        const removedPort = { ...config.channels[type][port] };
 
         // Supprimer le port
-        delete config.tunnels[type][port];
+        delete config.channels[type][port];
 
         // Si le type de tunnel ne contient plus de ports, supprimer la clé
-        if (Object.keys(config.tunnels[type]).length === 0) {
-            delete config.tunnels[type];
+        if (Object.keys(config.channels[type]).length === 0) {
+            delete config.channels[type];
         }
 
         // Sauvegarder la configuration
@@ -169,17 +171,85 @@ exports.removePortForward = async (tunnelId, type, port) => {
 };
 
 /**
- * Vérifie la connexion SSH du tunnel
+ * Vérifie si un port est ouvert sur un hôte donné
+ * @param {string} host - Hôte à vérifier
+ * @param {number} port - Port à vérifier
+ * @returns {Promise<number|null>} - Temps de réponse en ms ou null en cas d'échec
+ */
+const checkPort = (host, port) => {
+    return new Promise((resolve) => {
+        const start = Date.now();
+        const socket = new net.Socket();
+
+        socket.setTimeout(1000); // Timeout de 3 secondes
+        socket
+            .connect(port, host, () => {
+                const duration = Date.now() - start;
+                socket.destroy();
+                resolve(duration);
+            })
+            .on('error', () => {
+                socket.destroy();
+                resolve(null);
+            })
+            .on('timeout', () => {
+                socket.destroy();
+                resolve(null);
+            });
+    });
+};
+
+/**
+ * Vérifie la connexion SSH du tunnel et les ports configurés
  * @param {string} tunnelId - Identifiant du tunnel
  * @returns {Object} - Résultat du test
  */
 exports.checkTunnel = async (tunnelId) => {
     try {
-        // Validation à implémenter
-        // Cette fonction pourrait tester la connexion SSH sans établir de tunnel
-        // en utilisant une commande ssh simple
-        return { success: true, message: "Fonction non implémentée" };
+        // Lire la configuration actuelle
+        const config = readTunnelsConfig(tunnelId);
+        if (!config) {
+            throw new Error(`Tunnel ${tunnelId} non trouvé`);
+        }
+
+        // Vérifier le ssh_port
+        config.ssh_status = await checkPort(config.ssh_host || 'localhost', config.ssh_port || 22);
+        config.success = true;
+        if (config.ssh_status === null) {
+            // config.success = false;
+            throw new Error(`Le port SSH (${config.ssh_port || 22}) n'est pas accessible sur ${config.ssh_host || 'localhost'}`);
+        // } else {
+        //     config.success = true;
+        }
+
+        // Vérifier les listen_port et endpoint_port
+        for (const [type, ports] of Object.entries(config.channels || {})) {
+            for (const [listenPort, portConfig] of Object.entries(ports)) {
+                // Vérifier listen_port
+                const listenHost = portConfig.listen_host || 'localhost';
+                portConfig.listen_status = await checkPort(listenHost, parseInt(listenPort));
+
+                // Vérifier endpoint_port si applicable
+                if (portConfig.endpoint_host && portConfig.endpoint_port) {
+                    portConfig.endpoint_status = await checkPort(portConfig.endpoint_host, parseInt(portConfig.endpoint_port));
+                // } else {
+                //     portConfig.endpoint_status = null;
+                }
+                // si listen_port est null ou endpoint_port est null alors success sera false
+                if (portConfig.listen_status === null || (portConfig.endpoint_host && portConfig.endpoint_status === null)) {
+                    portConfig.success = false;
+                } else {
+                    portConfig.success = true;
+                }
+            }
+        }
+
+        return config;
     } catch (error) {
-        throw error;
+        logTrace(`Erreur lors de la vérification du tunnel: ${error.message}`);
+        return {
+            success: false,
+            message: `Erreur: ${error.message}`
+        };
     }
 };

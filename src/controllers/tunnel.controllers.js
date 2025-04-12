@@ -5,6 +5,7 @@ const { readTunnelsConfig, writeTunnelsConfig } = require('../utils/rwTunnelsCon
 const { buildCmd } = require('../utils/buildCmd'); // Fonction pour générer la commande
 const { logTrace, sleep } = require('../utils/tools'); // Fonction pour tracer les logs
 const { log } = require('util');
+const { trace } = require('console');
 
 const tunnelDir = path.join(__dirname, '../configs/tunnels/');
 const pidDir = path.join(__dirname, '../configs/pid');
@@ -81,7 +82,7 @@ const startSingleTunnel = (id) => {
     try {
         // Lire la configuration du tunnel
         const config = readTunnelsConfig(id); // Fonction hypothétique pour lire la config
-
+        // logTrace(`Configuration du tunnel ${id}:`, config);
         if (!config) {
             return {
                 success: false,
@@ -95,7 +96,9 @@ const startSingleTunnel = (id) => {
 
         // Préparer le fichier PID et la commande
         const pidFile = path.join(pidDir, `${id}.pid`);
+        // logTrace(`Fichier PID pour ${id}:`, pidFile);
         const cmd = buildCmd(config);
+        logTrace(`Commande pour ${id}:`, cmd);
         const env = { ...process.env, AUTOSSH_PIDFILE: pidFile }; // Définir le fichier PID pour autossh
 
         // Lancer autossh en mode détaché avec execSync
@@ -358,6 +361,12 @@ exports.getStatus = async (req, res) => {
         return {
             success: managedProcess ? true : false,
             id,
+            ip: config.ip,
+            ssh_port: config.ssh_port,
+            ssh_key: config.ssh_key,
+            options: config.options,
+            channels: config.channels,
+            bandwidth: config.bandwidth,
             pid: pid || null,
             cmd: (managedProcess?.cmd) || null,
             status: managedProcess ? "running" : "stopped",

@@ -14,7 +14,7 @@ const pidDir = path.join(__dirname, '../configs/pid');
 exports.checkTunnel = async (req, res) => {
     try {
         const result = await tunnelService.checkTunnel(req.params.id);
-        res.json({ success: true, message: "Test SSH réussi.", result });
+        res.json(result);
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }

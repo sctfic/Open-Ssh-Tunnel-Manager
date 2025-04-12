@@ -36,7 +36,7 @@ fichier id.json
     "ssh_key": "/path/to/key",
     "options": {"keepalive_interval": 10},
     "bandwidth": {"up": 1000, "down": 5000},
-    "tunnels": {
+    "channels": {
         "-L": {
             "9101": {"name": "printer1", "listen_port": 9101, "endpoint_host": "HP", "endpoint_port": 9100},
             "9102": {"name": "printer2", "listen_port": 9102, "endpoint_host": "xerox", "endpoint_port": 9100}
@@ -56,23 +56,24 @@ fichier id.json
 
 ## **4. Fonctionnalités de l’API**  
 
-| Endpoint | Méthode | Description |
-|----------|---------|-------------|
-| `/tunnels/start` | `POST` | Démarre tous les tunnels |
-| `/tunnels/start/:id` | `POST` | Démarre un tunnel spécifique |
-| `/tunnels/stop` | `POST` | Arrête tous les tunnels |
-| `/tunnels/stop/:id` | `POST` | Arrête un tunnel spécifique |
-| `/tunnels/restart` | `POST` | Redémarre tous les tunnels |
-| `/tunnels/restart/:id` | `POST` | Redémarre un tunnel spécifique |
-| `/tunnels/status` | `GET` | Renvoie l’état de tous les tunnels |
-| `/tunnels/status/:id` | `GET` | Renvoie l’état d’un tunnel spécifique |
-| `/tunnels/check` | `POST` | Teste tous les serveurs SSH |
-| `/tunnels/check/:id` | `POST` | Vérifie la connexion et la config d’un tunnel |
-| `/tunnels/pairing` | `POST` | Crée un fichier de config et génère une clé SSH |
-| `/tunnels/unpairing/:id` | `DELETE` | Supprime un tunnel et la clé SSH distante |
-| `/tunnels/add/:id` | `POST` | Ajoute un port forward (-L, -R ou -D) |
-| `/tunnels/remove/:id` | `DELETE` | Supprime un port forward |
-| `/tunnels/bandwith/:id` | `POST` | modifi la bande passante |
+| Endpoint                 | Méthode | Description                                  |
+|--------------------------|---------|----------------------------------------------|
+| `/tunnels/start`         | `GET`   | Démarre tous les tunnels                     |
+| `/tunnels/start/:id`     | `GET`   | Démarre un tunnel spécifique                 |
+| `/tunnels/stop`          | `GET`   | Arrête tous les tunnels                      |
+| `/tunnels/stop/:id`      | `GET`   | Arrête un tunnel spécifique                  |
+| `/tunnels/restart`       | `GET`   | Redémarre tous les tunnels                   |
+| `/tunnels/restart/:id`   | `GET`   | Redémarre un tunnel spécifique               |
+| `/tunnels/status`        | `GET`   | Renvoie l’état de tous les tunnels           |
+| `/tunnels/status/:id`    | `GET`   | Renvoie l’état d’un tunnel spécifique        |
+| `/channel/check`         | `GET`   | Teste la connexion de tous les serveurs SSH  |
+| `/channel/check/:id`     | `GET`   | Vérifie la connexion d’un tunnel spécifique  |
+| `/pairing/plug`          | `POST`  | Crée une config et génère une clé SSH        |
+| `/pairing/unplug/:id`    | `DELETE`| Supprime un tunnel et sa clé SSH distante    |
+| `/channel/add/:id`       | `POST`  | Ajoute un port forward (`-L`, `-R`, `-D`)    |
+| `/channel/rm/:id`        | `DELETE`| Supprime un port forward                     |
+| `/tunnels/bandwidth/:id` | `POST`  | Modifie la bande passante d’un tunnel        |
+
 
 ---
 
