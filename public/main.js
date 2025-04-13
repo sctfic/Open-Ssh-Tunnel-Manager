@@ -47,10 +47,43 @@ function showNotification(message, type = 'success') {
 
 // Logarithmic scale for sliders
 function linearToLog(value, min, max) {
-    const minLog = Math.log(1); // Start at 1 to avoid log(0)
+    // const minLog = Math.log(1); // Start at 1 to avoid log(0)
+    // const maxLog = Math.log(max);
+    // const scale = (maxLog - minLog) / (max - min);
+    // return Math.exp(minLog + scale * (value - min));
+    
+    // Calculer la valeur logarithmique comme avant
+    const minLog = Math.log(1);
     const maxLog = Math.log(max);
     const scale = (maxLog - minLog) / (max - min);
-    return Math.exp(minLog + scale * (value - min));
+    const result = Math.exp(minLog + scale * (value - min));
+    
+    // Convertir en chaîne de caractères pour manipuler les chiffres
+    const resultStr = result.toString();
+    
+    // Séparer la partie entière et décimale
+    const parts = resultStr.split('.');
+    let integerPart = parts[0];
+    let decimalPart = parts.length > 1 ? parts[1] : '';
+    
+    // Calculer combien de chiffres doivent être remplacés dans la partie entière
+    const intLength = integerPart.length;
+    const intZerosCount = Math.floor(intLength / 2);
+    
+    // Remplacer la moitié droite de la partie entière par des zéros
+    if (intZerosCount > 0) {
+        integerPart = integerPart.substring(0, intLength - intZerosCount) + '0'.repeat(intZerosCount);
+    }
+    
+    // Remplacer tous les chiffres de la partie décimale par des zéros si elle existe
+    if (decimalPart) {
+        decimalPart = '0'.repeat(decimalPart.length);
+    }
+    
+    // Reconstruire le nombre
+    const modifiedResult = parseFloat(integerPart + (decimalPart ? '.' + decimalPart : ''));
+    
+    return modifiedResult;
 }
 
 function logToLinear(value, min, max) {
