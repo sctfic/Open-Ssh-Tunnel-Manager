@@ -252,7 +252,3 @@ Pour contribuer à **OSTM** :
 
 ## **Licence**
 Ce projet est distribué sous la licence [MIT](LICENSE). Vous êtes libre de l’utiliser, le modifier et le redistribuer selon ses termes.
-
----
-
-Ce `README.md` est conçu pour être clair et complet, tout en intégrant les informations des documents joints et de la capture d’écran. Si vous avez besoin d’ajustements ou de sections supplémentaires, faites-le-moi savoir !
