@@ -186,8 +186,8 @@ async function checkTunnel(tunnelId) {
             if (data.bandwidth) {
                 upBandwidth.value = logToLinear(data.bandwidth.up, 0, 10000);
                 downBandwidth.value = logToLinear(data.bandwidth.down, 0, 10000);
-                upValue.textContent = `${Math.round(data.bandwidth.up)} Kbps`;
-                downValue.textContent = `${Math.round(data.bandwidth.down)} Kbps`;
+                upValue.textContent = `${Math.round(data.bandwidth.up)} Ko/s`;
+                downValue.textContent = `${Math.round(data.bandwidth.down)} Ko/s`;
             }
         }
         
@@ -381,7 +381,7 @@ function renderChannels(channels, container, tunnelId) {
         if (type === '-L') {
             iconClass = 'fa-right-long';
             typeTitle = 'Local Forward (-L)';
-            typeModifierClass = 'channel-type-L';
+            // typeModifierClass = 'channel-type-L';
             forwardFrom = channel.listen_port;
             forwardTo = channel.endpoint_host +':'+ channel.endpoint_port;
             forwardTitle = 'Transmet vers (mode Local -L)'
@@ -391,7 +391,7 @@ function renderChannels(channels, container, tunnelId) {
         } else if (type === '-R') {
             iconClass = 'fa-left-long';
             typeTitle = 'Remote Forward (-R)';
-            typeModifierClass = 'channel-type-R';
+            // typeModifierClass = 'channel-type-R';
             forwardFrom = channel.endpoint_host +':'+ channel.endpoint_port;
             forwardTo = channel.listen_host +':'+ channel.listen_port;
             forwardTitle = 'Recupere depuis (mode Remote -R)'
@@ -401,7 +401,7 @@ function renderChannels(channels, container, tunnelId) {
         } else if (type === '-D') {
             iconClass = 'fa-arrows-left-right';
             typeTitle = 'Dynamic Forward (-D)';
-            typeModifierClass = 'channel-type-D';
+            // typeModifierClass = 'channel-type-D';
             forwardFrom = channel.listen_port;
             forwardTo = '*:*';
             forwardTitle = 'tunnel SOCKS (mode Dynamique -D)'
@@ -480,8 +480,8 @@ function setupTunnelEvents(item, tunnelId, tunnel) {
                 const down = tunnel.bandwidth?.down || 5000;
                 upBandwidth.value = logToLinear(up, 0, 10000);
                 downBandwidth.value = logToLinear(down, 0, 10000);
-                upValue.textContent = `${Math.round(up)} Kbps`;
-                downValue.textContent = `${Math.round(down)} Kbps`;
+                upValue.textContent = `${Math.round(up)} Ko/s`;
+                downValue.textContent = `${Math.round(down)} Ko/s`;
             }
         }
     };
@@ -553,12 +553,12 @@ function setupTunnelEvents(item, tunnelId, tunnel) {
     
     upBandwidth.addEventListener('input', () => {
         const logValue = linearToLog(upBandwidth.value, 0, 10000);
-        upValue.textContent = `${Math.round(logValue)} Kbps`;
+        upValue.textContent = `${Math.round(logValue)} Ko/s`;
     });
     
     downBandwidth.addEventListener('input', () => {
         const logValue = linearToLog(downBandwidth.value, 0, 10000);
-        downValue.textContent = `${Math.round(logValue)} Kbps`;
+        downValue.textContent = `${Math.round(logValue)} Ko/s`;
     });
     
     portTypeSelect.addEventListener('change', () => {

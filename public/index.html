@@ -121,16 +121,14 @@
                 <span class="tunnel-name"></span>
                 <span class="tunnel-ip badge"></span>
             </div>
-            <div class="tunnel-summary">
+            <div class="tunnel-actions tunnel-summary">
                 <span class="channels-count badge">
                     <i class="fas fa-exchange-alt"></i> <span class="count">0</span>
                 </span>
                 <span class="bandwidth-info">
-                    <i class="fas fa-arrow-up"></i> <span class="up-speed">0</span>Ko/s
-                    <i class="fas fa-arrow-down"></i> <span class="down-speed">0</span>Ko/s
+                    <i class="fas fa-arrow-up rotate45"></i> <span class="up-speed">0</span>Ko/s 
+                    <i class="fas fa-arrow-down rotate45"></i> <span class="down-speed">0</span>Ko/s
                 </span>
-            </div>
-            <div class="tunnel-actions">
                 <div class="action-dropdown">
                     <button class="btn btn-sm btn-secondary dropdown-toggle" title="Plus d'actions">
                         <i class="fas fa-ellipsis-v"></i>
@@ -144,6 +142,9 @@
                     </div>
                 </div>
             </div>
+            <!-- <div class="tunnel-actions">
+
+            </div> -->
         </div>
         <div class="tunnel-content">
             <div class="tunnel-tabs">
@@ -219,7 +220,7 @@
                         <div class="info-value tunnel-name-value"></div>
                     </div>
                     <div class="info-item">
-                        <div class="info-label">IP Serveur</div>
+                        <div class="info-label">Serveur SSH</div>
                         <div class="info-value tunnel-ip-value"></div>
                     </div>
                     <div class="info-item">
@@ -247,7 +248,7 @@
                         <div class="bandwidth-control">
                             <label>
                                 <!-- <i class="fa-duotone fa-solid fa-up-right-and-down-left-from-center"></i> -->
-                                <i class="fas fa-arrow-up"></i> Upload (Ko/s)
+                                <i class="fas fa-arrow-up rotate45"></i> Upload
                                 <span class="up-value">- Ko/s</span>
                             </label>
                             <div class="slider-container">
@@ -257,7 +258,7 @@
                         <div class="bandwidth-control">
                             <label>
                                 <!-- <i class="fa-duotone fa-solid fa-up-right-and-down-left-from-center"></i> -->
-                                <i class="fas fa-arrow-down"></i> Download (Ko/s)
+                                <i class="fas fa-arrow-down rotate45"></i> Download
                                 <span class="down-value">- Ko/s</span>
                             </label>
                             <div class="slider-container">
