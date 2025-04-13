@@ -509,10 +509,32 @@ function setupTunnelEvents(item, tunnelId, tunnel) {
                 const upValue = item.querySelector('.up-value');
                 const downValue = item.querySelector('.down-value');
                 
-                const up = tunnel.bandwidth?.up || 1000;
-                const down = tunnel.bandwidth?.down || 5000;
-                upBandwidth.value = logToLinear(up, 0, 10000);
-                downBandwidth.value = logToLinear(down, 0, 10000);
+                // const up = tunnel.bandwidth?.up || 1000;
+                // const down = tunnel.bandwidth?.down || 5000;
+                // upBandwidth.value = logToLinear(up, 0, 10000);
+                // downBandwidth.value = logToLinear(down, 0, 10000);
+                // Gestion de la molette pour ajuster les valeurs
+                
+                function handleWheel(e) {
+                    e.preventDefault();
+                    const step = 100; // Ajustez ce pas selon les besoins
+                    let value = parseInt(this.value);
+                    
+                    if (e.deltaY < 0) { // Molette vers le haut (augmentation)
+                        value += step;
+                    } else { // Molette vers le bas (diminution)
+                        value -= step;
+                    }
+                    
+                    value = Math.max(0, Math.min(10000, value));
+                    this.value = value;
+                    this.dispatchEvent(new Event('input')); // Déclenche la mise à jour de l'affichage
+                }
+
+                upBandwidth.addEventListener('wheel', handleWheel, { passive: false });
+                downBandwidth.addEventListener('wheel', handleWheel, { passive: false });
+
+
                 upValue.textContent = `${Math.round(up)} Ko/s`;
                 downValue.textContent = `${Math.round(down)} Ko/s`;
             }
