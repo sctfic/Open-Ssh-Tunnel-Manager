@@ -1,124 +1,82 @@
-Voici un cahier des charges détaillé pour ton **Manager de Tunnels SSH**.  
+
+aide moi a implementer le backend OSTM2, en nodeJS
+**OSTM2** (Open SSH Tunnels Manager 2) se veut etre un outil puissant pour gérer des tunnels SSH, qu’il s’agisse de transferts de ports locaux (`-L`), distants (`-R`) ou dynamiques (`-D`).
 
 ---
 
-# **Cahier des charges : Manager de Tunnels SSH**  
-
-## **1. Objectif du projet**  
-Développer une **API Node.js** permettant de gérer des tunnels SSH à l’aide de **autossh** et **trickle**.  
-L’API doit offrir un contrôle complet des tunnels via des fichiers de configuration JSON, incluant :  
-- Démarrage, arrêt et redémarrage des tunnels  
-- Vérification des connexions SSH  
-- Ajout et suppression de tunnels  
-- Gestion des transferts de ports (-L, -R, -D)  
-
----
-
-## **2. Technologies**  
-- **Backend** : Node.js + Express  
-- **Gestion des processus** : `child_process` ou `pm2`  
-- **Tunnels SSH** : `autossh`  
-- **Gestion de la bande passante** : `trickle`  
-- **Base de données** : Fichiers JSON (un par tunnel)  
-- **Sécurité** : Gestion des clés SSH, validation des entrées  
+## **API backEnd NodeJS**
+- **Configuration flexible** : lecture ecriture des Configs des tunnels dans des fichiers JSON, emplacement `ostm2/config/sites/` (1 fichier json par tunnel ssh).
+- **Transferts de ports** : Support des options de port forwarding `-L`, `-R` et `-D`
+- **deployer un tunnels** : monte une connexion ssh, cette api aura besoin d'un user ssh et du mdp ou de la clef ssh (le mdp ne sera pas conserve, une clef ssh sera genere et utilisee a la place)
+- **Gestion des tunnels** : les api pour Ajouter, Supprimer, Démarrer, Arrêter ou Redémarrer un tunnels SSH.
+- **Gestion des channels** : les api pour ajouter, supprimer des channels (un seul portforward).
+- **Contrôle de la bande passante** : limiter la bande passante par process ssh + api de modification de ces debit
+- **Persistance des tunnels** : redemare les tunnels pour maintenir les connexions
+- **Supervision en temps réel** : Vérifier l’état des tunnels (actifs, inactifs, orphelins) et suivie des debit Up/Down en temp reel.
+- **autentification** : pour toute les api PUT POST DELETE, credential dans un JSON {"admin": [bcrypt.hash]}
 
 ---
 
-## **3. Structure d’un tunnel (fichier JSON)**  
-Un tunnel est défini dans un fichier JSON stocké dans un dossier `/config/sites/id.json` :  
+## **requierement**
+TypeScript + fastify + ssh2 + pm2 + socket.io + trickle + lowdb
 
-fichier id.json
+## **Configuration**
+Les tunnels sont configurés via des fichiers JSON dans le dossier `ostm2/config/sites/`. Chaque fichier est nommé `id.json` (par exemple, `paris.json`) et contient les détails du tunnel. Voici un exemple de configuration :
+
 ```json
 {
-    "user": "tunnel_user",
-    "ip": "142.16.102.35",
+    "ip": "remote_ssh_serveur",
     "ssh_port": 22,
-    "ssh_key": "/path/to/key",
-    "options": {"keepalive_interval": 10},
-    "bandwidth": {"up": 1000, "down": 5000},
+    "user": "remote_ssh_user",
+    "ssh_key": "ostm2/configs/sites/Paris_key",
+    "options": {
+        "compression": "yes",
+        "ServerAliveInterval": 10,
+        "ServerAliveCountMax": 3
+    },
+    "bandwidth": {
+        "up": 100,
+        "down": 500
+    },
     "channels": {
         "-L": {
-            "9101": {"name": "printer1", "listen_port": 9101, "endpoint_host": "HP", "endpoint_port": 9100},
-            "9102": {"name": "printer2", "listen_port": 9102, "endpoint_host": "xerox", "endpoint_port": 9100}
+            "9101": {
+                "name": "printer1",
+                "listen_port": 9101,
+                "endpoint_host": "HP",
+                "endpoint_port": 9100
+            },
+            "9102": {
+                "name": "printer2",
+                "listen_port": 9102,
+                "endpoint_host": "xerox",
+                "endpoint_port": 9100
+            }
         },
         "-R": {
-            "5003": {"name": "cam1", "listen_port": 5003, "listen_host": "cam", "endpoint_host": "127.0.0.1", "endpoint_port": 5000},
-            "1901": {"name": "scan1", "listen_port": 1901, "listen_host": "scan", "endpoint_host": "127.0.0.1", "endpoint_port": 1900}
+            "1901": {
+                "name": "scan1",
+                "listen_port": 1901,
+                "listen_host": "scan",
+                "endpoint_host": "127.0.0.1",
+                "endpoint_port": 1900
+            },
+            "5003": {
+                "name": "cam1",
+                "listen_port": 5003,
+                "listen_host": "cam",
+                "endpoint_host": "127.0.0.1",
+                "endpoint_port": 5000
+            }
         },
         "-D": {
-            "4443": {"name": "remote_lan1", "listen_port": 4443}
+            "4443": {
+                "name": "remote_lan1",
+                "listen_port": 4443
+            }
         }
     }
 }
 ```
 
----
-
-## **4. Fonctionnalités de l’API**  
-
-| Endpoint                 | Méthode | Description                                  |
-|--------------------------|---------|----------------------------------------------|
-| `/tunnels/start`         | `GET`   | Démarre tous les tunnels                     |
-| `/tunnels/start/:id`     | `GET`   | Démarre un tunnel spécifique                 |
-| `/tunnels/stop`          | `GET`   | Arrête tous les tunnels                      |
-| `/tunnels/stop/:id`      | `GET`   | Arrête un tunnel spécifique                  |
-| `/tunnels/restart`       | `GET`   | Redémarre tous les tunnels                   |
-| `/tunnels/restart/:id`   | `GET`   | Redémarre un tunnel spécifique               |
-| `/tunnels/status`        | `GET`   | Renvoie l’état de tous les tunnels           |
-| `/tunnels/status/:id`    | `GET`   | Renvoie l’état d’un tunnel spécifique        |
-| `/channel/check`         | `GET`   | Teste la connexion de tous les serveurs SSH  |
-| `/channel/check/:id`     | `GET`   | Vérifie la connexion d’un tunnel spécifique  |
-| `/pairing/plug`          | `POST`  | Crée une config et génère une clé SSH        |
-| `/pairing/unplug/:id`    | `DELETE`| Supprime un tunnel et sa clé SSH distante    |
-| `/channel/add/:id`       | `POST`  | Ajoute un port forward (`-L`, `-R`, `-D`)    |
-| `/channel/rm/:id`        | `DELETE`| Supprime un port forward                     |
-| `/tunnels/bandwidth/:id` | `POST`  | Modifie la bande passante d’un tunnel        |
-
-
----
-
-## **5. Fonctionnement**  
-
-### **5.1 Gestion des tunnels**  
-1. **Démarrage d’un tunnel**  
-   - Lecture du fichier JSON  
-   - Construction de la commande `autossh` avec `trickle`  
-   - Exécution du processus  
-   - Stockage du pid du processus  
-
-2. **Arrêt d’un tunnel**  
-   - Recherche du processus en cours  
-   - Terminaison propre via `kill` ou `pm2`  
-
-3. **Statut des tunnels**  
-   - Vérification des processus en cours
-   - Retour d’un état JSON détaillé
-
----
-
-## **6. Sécurité**  
-- Vérification des fichiers JSON pour éviter l’injection de commande  
-- Validation des paramètres envoyés à l’API  
-- Gestion des clés SSH via `ssh-keygen` et `ssh-copy-id`  
-
----
-
-## **7. Exemples de commandes générées**  
-
-### **Démarrage d’un tunnel mixte**  
-```bash
-trickle -u 1000 -d 5000 autossh -M 0 -N -o ServerAliveInterval=10 \
-  -i /path/to/key -L 9101:HP:9100 -L 9102:xerox:9100 -R 5003:127.0.0.1:5000 tunnel_user@142.16.102.35 -p 22
-```
-
-### **Démarrage d’un reverse tunnel (-R)**  
-```bash
-trickle -u 1000 -d 5000 autossh -M 0 -N -o ServerAliveInterval=10 \
-  -i /path/to/key -R 5003:127.0.0.1:5000 -R 1901:127.0.0.1:1900 tunnel_user@142.16.102.35 -p 22
-```
-
----
-
-## **8. Conclusion**  
-Cette API destinée a gérer des **tunnels SSH dynamiques**, avec des options avancées pour le contrôle du débit et la gestion des ports. 🚀  
-Besoin d’un **prototype de code** pour démarrer rapidement ? 😃
+dans un premier temps quels outils serai pertinant d'utiliser ?
