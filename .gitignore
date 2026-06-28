@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Runtime data (persistance + secrets)
+config/users.json
+config/tunnels/*.json
+keys/*.pem
+logs/*.log
+logs/stats/*.json
+
+# Keep the directory structure
+!config/tunnels/.gitkeep
+!keys/.gitkeep
+!logs/stats/.gitkeep
+
+# Environment
+.env
+
+# Coverage / test artifacts
+coverage/
+.vitest/
+
+# OS
+.DS_Store
+Thumbs.db
