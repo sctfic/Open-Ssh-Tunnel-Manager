@@ -1,0 +1,11 @@
+services:
+  ostm:
+    build: .
+    ports:
+      - "8080:8080"
+    env_file: .env
+    volumes:
+      - ./config:/app/config
+      - ./keys:/app/keys
+      - ./logs:/app/logs
+    restart: unless-stopped

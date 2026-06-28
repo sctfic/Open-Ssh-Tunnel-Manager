@@ -1,32 +1,91 @@
-require('dotenv').config();
-const express = require('express');
-const helmet = require('helmet');
-const cors = require('cors');
-const path = require('path'); // Ajouté
-const logger = require('./middlewares/logger');
-const errorHandler = require('./middlewares/errorHandler');
-const routes = require('./routes');
+/**
+ * Fastify application factory.
+ *
+ * This module builds and returns a fully-configured Fastify app **without**
+ * calling `listen()`. This makes it testable via supertest.
+ *
+ * In production, `server.js` imports this and calls `app.listen()`.
+ */
+import Fastify from 'fastify'
+import websocket from '@fastify/websocket'
+import ajvFormats from 'ajv-formats'
+import { createLogger } from './logger.js'
+import { errorHandler } from './middleware/errorHandler.js'
+import { container } from './container.js'
+import authRoutes from './routes/auth.js'
+import userRoutes from './routes/users.js'
+import tunnelRoutes from './routes/tunnels.js'
+import channelRoutes from './routes/channels.js'
 
-const app = express();
+/**
+ * @param {object} [opts] — overrides injected for tests
+ * @param {object} [opts.logger] — custom pino instance (silence in tests)
+ * @param {string} [opts.jwtSecret] — override JWT secret
+ * @returns {Promise<import('fastify').FastifyInstance>}
+ */
+export async function buildApp(opts = {}) {
+  const log = opts.logger ?? createLogger()
 
-// Middlewares de base
-app.use(helmet());
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(logger.requestLogger);
+  const app = Fastify({
+    // Fastify accepts a logger *config* object, not a live pino instance.
+    logger: false,
+    requestIdLogLabel: 'requestId',
+    requestIdHeader: 'x-request-id',
+    disableRequestLogging: opts.disableRequestLogging ?? false,
+    // Use Fastify's built-in AJV8 with formats (email, uri, date-time, ...).
+    // Configured here (not via setValidatorCompiler) so it propagates correctly
+    // to encapsulated plugin contexts created by app.register().
+    ajv: {
+      customOptions: {
+        allErrors: true,
+        removeAdditional: false,
+        strict: true,
+      },
+      plugins: [
+        [ajvFormats, []],
+      ],
+    },
+  })
 
-// Middleware statique (ajoutez cette ligne)
-// app.use(express.static(path.join(__dirname, '../public')));
-const publicPath = path.join(__dirname, '../public');
-console.log(`Serving static files from: ${publicPath}`);
-app.use(express.static(publicPath));
+  // --- Plugins (no prefix) ---
+  await app.register(websocket)
 
-// Routes API
-app.use('/api/v1', routes);
+  // --- Error handling (must be registered after validation compiler) ---
+  await app.register(errorHandler)
 
-// Middlewares d'erreurs
-app.use(errorHandler.notFound);
-app.use(errorHandler.globalError);
+  // --- DI container (services, repositories, etc.) ---
+  const c = container(opts)
 
-module.exports = app;
+  // Expose container for route access — MUST be before route registrations
+  // because Fastify's register() creates an encapsulated context.
+  app.decorate('container', c)
+
+  // --- Health check (no auth required) ---
+  app.get('/health', async (_request, reply) => {
+    return reply.code(200).send({ status: 'ok', timestamp: Date.now() })
+  })
+
+  // --- Routes ---
+
+  // Auth routes (no prefix)
+  await app.register(authRoutes)
+
+  // User routes
+  await app.register(userRoutes)
+
+  // Tunnel routes
+  await app.register(tunnelRoutes, { prefix: '/tunnels' })
+
+  // Channel routes (sub-resource of tunnels)
+  await app.register(channelRoutes, { prefix: '/tunnels/:id/channels' })
+
+  // TODO: Step 6 — Stats routes + WS
+  // await app.register(statsRoutes)
+
+  // TODO: Step 7 — Pairing route
+  // await app.register(pairingRoutes)
+
+  return app
+}
+
+export default buildApp
