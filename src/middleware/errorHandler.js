@@ -1,19 +1,29 @@
-import { AppError, toErrorPayload } from '../utils/errors.js'
+import { fileURLToPath } from 'node:url'
+import { AppError, ValidationError, toErrorPayload } from '../utils/errors.js'
+
+const __filename = fileURLToPath(import.meta.url)
 
 /**
- * Fastify plugin: uniform error + 404 handlers.
- * Response format: { "error": "...", "code": 404 }
- * Fastify/AJV validation failures -> 422.
+ * Fastify plugin: installs a uniform error handler and a 404 handler.
+ *
+ * Response format on error (per the spec):
+ *   { "error": "Tunnel not found", "code": 404 }
+ *
+ * Fastify validation failures (AJV) are converted to 422.
  */
 export function errorHandler(app, _opts, done) {
-  app.setNotFoundHandler((_request, reply) => {
+  // 404 — route not found
+  app.setNotFoundHandler((request, reply) => {
     reply.code(404).send({ error: 'Route not found', code: 404 })
   })
 
+  // Global error handler
   app.setErrorHandler((error, request, reply) => {
+    // Fastify/AJV validation error -> 422
     if (error.validation) {
       const msg = error.validation
-        .map((v) => v.instancePath || v.schemaPath || v.message)
+        .map((v) => v.instancePath || v.schemaPath || '')
+        .concat(error.validation.map((v) => v.message))
         .filter(Boolean)
         .join(', ') || 'Validation error'
       request.log?.warn?.({ validation: error.validation }, 'request validation failed')

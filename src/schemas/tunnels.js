@@ -1,3 +1,13 @@
+<<<<<<< HEAD
+=======
+/**
+ * AJV schemas for tunnel routes.
+ *
+ * The tunnel JSON format matches the spec exactly:
+ *   { id, user, ip, ssh_port, ssh_key, options, bandwidth, tunnels: { -L, -R, -D } }
+ */
+
+>>>>>>> 2a305446295e6de1ea540bcfa458df0c3ae6f10b
 export const tunnelIdParam = {
   type: 'object',
   required: ['id'],
@@ -91,11 +101,28 @@ export const updateTunnelBody = {
   type: 'object',
   additionalProperties: false,
   properties: {
+<<<<<<< HEAD
+=======
+    // id is NOT updatable
+>>>>>>> 2a305446295e6de1ea540bcfa458df0c3ae6f10b
     user: { type: 'string', minLength: 1 },
     ip: { type: 'string', minLength: 1 },
     ssh_port: { type: 'integer', minimum: 1, maximum: 65535 },
     ssh_key: { type: 'string', minLength: 1 },
     options: optionsSchema,
     bandwidth: bandwidthSchema,
+<<<<<<< HEAD
   },
 }
+=======
+    // tunnels are managed via dedicated channel routes
+  },
+}
+
+/** Re-export channel validation schemas for reuse. */
+export {
+  localForwardSchema,
+  remoteForwardSchema,
+  dynamicForwardSchema,
+}
+>>>>>>> 2a305446295e6de1ea540bcfa458df0c3ae6f10b

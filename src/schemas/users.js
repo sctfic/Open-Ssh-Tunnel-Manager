@@ -1,3 +1,10 @@
+<<<<<<< HEAD
+=======
+/**
+ * AJV schemas for user routes.
+ */
+
+>>>>>>> 2a305446295e6de1ea540bcfa458df0c3ae6f10b
 export const usernameParam = {
   type: 'object',
   required: ['username'],
@@ -27,3 +34,30 @@ export const updateUserBody = {
     tunnels: { type: 'array', items: { type: 'string' } },
   },
 }
+<<<<<<< HEAD
+=======
+
+export const userResponse = {
+  type: 'object',
+  required: ['username', 'role'],
+  properties: {
+    username: { type: 'string' },
+    role: { type: 'string', enum: ['admin', 'tech'] },
+    tunnels: { type: 'array', items: { type: 'string' } },
+  },
+}
+
+export const usersListResponse = {
+  type: 'array',
+  items: userResponse,
+}
+
+export const errorResponse = {
+  type: 'object',
+  required: ['error', 'code'],
+  properties: {
+    error: { type: 'string' },
+    code: { type: 'number' },
+  },
+}
+>>>>>>> 2a305446295e6de1ea540bcfa458df0c3ae6f10b

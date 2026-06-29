@@ -1,14 +1,38 @@
+<<<<<<< HEAD
 node_modules/
+=======
+# Dependencies
+node_modules/
+
+# Runtime data (persistance + secrets)
+>>>>>>> 2a305446295e6de1ea540bcfa458df0c3ae6f10b
 config/users.json
 config/tunnels/*.json
 keys/*.pem
 logs/*.log
 logs/stats/*.json
+<<<<<<< HEAD
 .env
 coverage/
 .vitest/
 !config/tunnels/.gitkeep
 !keys/.gitkeep
 !logs/stats/.gitkeep
+=======
+
+# Keep the directory structure
+!config/tunnels/.gitkeep
+!keys/.gitkeep
+!logs/stats/.gitkeep
+
+# Environment
+.env
+
+# Coverage / test artifacts
+coverage/
+.vitest/
+
+# OS
+>>>>>>> 2a305446295e6de1ea540bcfa458df0c3ae6f10b
 .DS_Store
 Thumbs.db

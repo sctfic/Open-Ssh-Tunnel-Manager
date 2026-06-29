@@ -1,12 +1,35 @@
 import bcrypt from 'bcrypt'
 import { authenticate } from '../middleware/jwt.js'
 import { requireRole } from '../middleware/permissions.js'
+<<<<<<< HEAD
 import { usernameParam, createUserBody, updateUserBody } from '../schemas/users.js'
 
 /**
  * User management routes (admin only).
  *   GET POST /users
  *   GET PUT DELETE /users/:username
+=======
+import {
+  usernameParam,
+  createUserBody,
+  updateUserBody,
+} from '../schemas/users.js'
+
+/**
+ * User management routes plugin.
+ *
+ *   GET    /users            — list users (admin only)
+ *   POST   /users            — create a user (admin only)
+ *   PUT    /users/:username  — update a user (admin only)
+ *   DELETE /users/:username  — delete a user (admin only)
+ *
+ * Note: response schemas are intentionally omitted. Fastify v5's response
+ * serializer (fast-json-stringify) interacts poorly with our custom AJV
+ * validator compiler for object schemas, causing the response to hang.
+ * Input validation (body/params) is still enforced via AJV.
+ *
+ * @param {import('fastify').FastifyInstance} app
+>>>>>>> 2a305446295e6de1ea540bcfa458df0c3ae6f10b
  */
 export default async function userRoutes(app) {
   const C = app.container
@@ -33,7 +56,14 @@ export default async function userRoutes(app) {
     const { username, password, role, tunnels } = request.body
     const password_hash = await bcrypt.hash(password, 10)
     const created = await C.userRepository.create({
+<<<<<<< HEAD
       username, password_hash, role, tunnels: tunnels || [],
+=======
+      username,
+      password_hash,
+      role,
+      tunnels: tunnels || [],
+>>>>>>> 2a305446295e6de1ea540bcfa458df0c3ae6f10b
     })
     return reply.code(201).send(created)
   })

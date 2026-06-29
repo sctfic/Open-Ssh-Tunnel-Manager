@@ -1,18 +1,47 @@
+<<<<<<< HEAD
 import { mkdir, unlink, readFile, open as fsOpen, rename } from 'node:fs/promises'
+=======
+import { rename, mkdir, unlink, readFile, open as fsOpen } from 'node:fs/promises'
+>>>>>>> 2a305446295e6de1ea540bcfa458df0c3ae6f10b
 import { randomBytes } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { JsonReadError, DiskWriteError } from './errors.js'
 
+<<<<<<< HEAD
+=======
+/**
+ * Ensure a directory exists (recursive). Best-effort; propagates fs errors.
+ */
+>>>>>>> 2a305446295e6de1ea540bcfa458df0c3ae6f10b
 export async function ensureDir(dir) {
   await mkdir(dir, { recursive: true })
 }
 
+<<<<<<< HEAD
+=======
+/**
+ * Read and JSON.parse a file.
+ *
+ * @param {string} filePath absolute path
+ * @param {object} [opts]
+ * @param {*} [opts.defaultIfMissing] if provided, return this when ENOENT
+ * @returns {Promise<*>} parsed JSON
+ * @throws {JsonReadError} on parse failure
+ * @throws {Error} rethrown fs error (ENOENT unless defaultIfMissing)
+ */
+>>>>>>> 2a305446295e6de1ea540bcfa458df0c3ae6f10b
 export async function readJson(filePath, { defaultIfMissing } = {}) {
   let raw
   try {
     raw = await readFile(filePath, 'utf8')
   } catch (err) {
+<<<<<<< HEAD
     if (err.code === 'ENOENT' && defaultIfMissing !== undefined) return defaultIfMissing
+=======
+    if (err.code === 'ENOENT' && defaultIfMissing !== undefined) {
+      return defaultIfMissing
+    }
+>>>>>>> 2a305446295e6de1ea540bcfa458df0c3ae6f10b
     throw err
   }
   try {
@@ -22,6 +51,22 @@ export async function readJson(filePath, { defaultIfMissing } = {}) {
   }
 }
 
+<<<<<<< HEAD
+=======
+/**
+ * Atomically write JSON to a file.
+ *
+ * Strategy: write to a temp file `<name>.<rand>.tmp` in the same directory,
+ * fsync it, then rename over the target. Rename is atomic on POSIX (and on
+ * Windows when on the same volume). This prevents half-written files on crash.
+ *
+ * @param {string} filePath absolute path
+ * @param {*} data serialisable value
+ * @param {object} [opts]
+ * @param {boolean} [opts.fsync=true] fsync the temp file before rename
+ * @throws {DiskWriteError} on write/rename failure
+ */
+>>>>>>> 2a305446295e6de1ea540bcfa458df0c3ae6f10b
 export async function writeJson(filePath, data, { fsync = true } = {}) {
   const dir = dirname(filePath)
   await ensureDir(dir)
@@ -41,6 +86,10 @@ export async function writeJson(filePath, data, { fsync = true } = {}) {
     if (handle) {
       try { await handle.close() } catch { /* ignore */ }
     }
+<<<<<<< HEAD
+=======
+    // Cleanup temp file best-effort (ignore errors, file may not exist)
+>>>>>>> 2a305446295e6de1ea540bcfa458df0c3ae6f10b
     try { await unlink(tmp) } catch { /* ignore */ }
     throw new DiskWriteError(`Failed to write ${filePath}: ${err.message}`, { cause: err })
   }

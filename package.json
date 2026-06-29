@@ -1,9 +1,17 @@
 {
   "name": "ostm",
   "version": "0.1.0",
+<<<<<<< HEAD
   "description": "OSTM - Open SSH Tunnel Manager. Backend REST to manage SSH port-forwarding tunnels.",
   "type": "module",
   "engines": { "node": ">=22" },
+=======
+  "description": "OSTM - Open SSH Tunnel Manager. Backend REST to administrate, supervise and control SSH port-forwarding tunnels.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+>>>>>>> 2a305446295e6de1ea540bcfa458df0c3ae6f10b
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",

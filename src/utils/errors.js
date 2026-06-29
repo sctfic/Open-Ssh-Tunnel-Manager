@@ -1,6 +1,18 @@
 /**
+<<<<<<< HEAD
  * Domain error hierarchy. Each AppError carries a statusCode + code.
  * The errorHandler middleware converts them into { error, code } JSON.
+=======
+ * Domain error hierarchy.
+ *
+ * Every AppError carries:
+ *   - `statusCode`: the HTTP status to send
+ *   - `code`:       a short machine-readable code
+ *   - `message`:    a human-readable message
+ *
+ * The error handler middleware converts any thrown AppError into a uniform
+ * JSON response: { error, code }.
+>>>>>>> 2a305446295e6de1ea540bcfa458df0c3ae6f10b
  */
 export class AppError extends Error {
   constructor(message, { statusCode = 500, code = 'INTERNAL_ERROR', cause } = {}) {
@@ -65,11 +77,28 @@ export class DiskWriteError extends AppError {
   }
 }
 
+<<<<<<< HEAD
+=======
+/**
+ * True if the given value is one of our AppError instances.
+ */
+>>>>>>> 2a305446295e6de1ea540bcfa458df0c3ae6f10b
 export function isAppError(err) {
   return err instanceof AppError
 }
 
+<<<<<<< HEAD
 export function toErrorPayload(err) {
   if (err instanceof AppError) return { error: err.message, code: err.statusCode }
+=======
+/**
+ * Convert any thrown value into a uniform error payload for HTTP responses.
+ */
+export function toErrorPayload(err) {
+  if (err instanceof AppError) {
+    return { error: err.message, code: err.statusCode }
+  }
+  // Unknown error: do not leak internals.
+>>>>>>> 2a305446295e6de1ea540bcfa458df0c3ae6f10b
   return { error: 'Internal Server Error', code: 500 }
 }
