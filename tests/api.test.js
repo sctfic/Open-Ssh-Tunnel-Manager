@@ -71,16 +71,29 @@ test('root is immutable and rights revocation applies to an existing session', a
   await call('root', 'PATCH', '/users/reader', { disabled: true });
   assert.equal((await call('reader', 'GET', '/tunnels')).statusCode, 401);
 });
-test('manage creates users and tunnels, creator gets manage and deleted ACLs are cleared', async t => {
+test('only root creates users while manage creates tunnels and deleted ACLs are cleared', async t => {
   const { call, app } = await fixture(t);
   assert.equal((await call('writer', 'POST', '/users', { username: 'newuser', password: secret })).statusCode, 403);
-  assert.equal((await call('manager', 'POST', '/users', { username: 'newuser', password: secret })).statusCode, 201);
+  assert.equal((await call('manager', 'POST', '/users', { username: 'newuser', password: secret })).statusCode, 403);
+  assert.equal((await call('root', 'POST', '/users', { username: 'newuser', password: secret })).statusCode, 201);
   assert.deepEqual((await app.services.store.users()).newuser.rights, {});
   const r = await call('manager', 'POST', '/tunnels', { id: 'beta', config: config() }); assert.equal(r.statusCode, 201); assert.equal(r.json().level, 4);
   await call('manager', 'PUT', '/tunnels/beta/rights/reader', { level: 1 });
   assert.equal((await call('writer', 'DELETE', '/tunnels/alpha')).statusCode, 403);
   assert.equal((await call('manager', 'DELETE', '/tunnels/beta')).statusCode, 200);
   assert.equal((await app.services.store.users()).reader.rights.beta, undefined);
+});
+test('first setup creates root once and leaves every other API route protected', async t => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'ostm-setup-')); const app = await buildApp({ dataDir: dir, manager: new FakeManager(), restore: false });
+  t.after(async () => { await app.close(); await rm(dir, { recursive: true, force: true }); });
+  assert.deepEqual((await app.inject({ method: 'GET', url: '/api/v2/setup/status' })).json(), { required: true });
+  const page = await app.inject({ method: 'GET', url: '/' }); assert.equal(page.statusCode, 200); assert.match(page.headers['content-type'], /text\/html/);
+  const asset = await app.inject({ method: 'GET', url: '/assets/js/app.js' }); assert.equal(asset.statusCode, 200); assert.match(asset.headers['content-type'], /javascript/);
+  assert.equal((await app.inject({ method: 'GET', url: '/api/v2/tunnels' })).statusCode, 401);
+  assert.equal((await app.inject({ method: 'POST', url: '/api/v2/setup', payload: { password: secret } })).statusCode, 201);
+  assert.deepEqual((await app.inject({ method: 'GET', url: '/api/v2/setup/status' })).json(), { required: false });
+  assert.equal((await app.inject({ method: 'POST', url: '/api/v2/setup', payload: { password: secret } })).statusCode, 409);
+  assert.equal((await app.inject({ method: 'POST', url: '/api/v2/auth/login', payload: { username: 'root', password: secret } })).statusCode, 200);
 });
 test('validation rejects traversal, arbitrary key paths, unknown configuration and bad channels', async t => {
   const { call } = await fixture(t);

@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import { z } from 'zod';
 import path from 'node:path';
-import { mkdir, writeFile, rm, appendFile } from 'node:fs/promises';
+import { mkdir, writeFile, rm, appendFile, readFile } from 'node:fs/promises';
 import { Store } from './store.js';
 import { Auth, level, canManage, hashPassword, verifyPassword } from './auth.js';
 import { Manager } from './manager.js';
@@ -20,7 +20,7 @@ import { provision } from './ssh.js';
  * - Manager : cycle de vie SSH et mesures réseau ;
  * - Transport : mode Linux privilégié ou mode direct de développement.
  */
-export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', transport, manager, logger = false, restore = true } = {}) {
+export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', frontendDir = process.env.OSTM_FRONTEND_DIR || 'frontend', transport, manager, logger = false, restore = true } = {}) {
   // Les limites protègent le petit serveur embarqué contre les corps volumineux
   // et les connexions qui restent silencieuses trop longtemps.
   const app = Fastify({ logger, bodyLimit: 128 * 1024, requestTimeout: 30000, connectionTimeout: 15000, trustProxy: false });
@@ -39,9 +39,10 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
     reply.code(status).send({ error: status >= 500 ? 'Operation failed; inspect tunnel status or server logs' : error.message });
   });
   app.addHook('onRequest', async request => {
-    // Seuls le healthcheck et le login sont publics. Toutes les autres routes,
-    // y compris les lectures et le flux temps réel, demandent un Bearer token.
-    if (request.routeOptions.url === '/health' || request.routeOptions.url === '/api/v2/auth/login') return;
+    // Les fichiers du frontend et l'assistant de première initialisation sont
+    // publics. Toutes les données métier et les commandes restent authentifiées.
+    const publicRoutes = ['/', '/favicon.svg', '/health', '/api/v2/setup/status', '/api/v2/setup', '/api/v2/auth/login'];
+    if (publicRoutes.includes(request.routeOptions.url) || request.routeOptions.url === '/assets/*') return;
     request.user = await auth.authenticate(request.headers.authorization);
   });
   const audit = async (request, action, target) => {
@@ -63,6 +64,18 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
 
   // --- État du service et ressources réseau privilégiées --------------------
   app.get('/health', async () => ({ status: 'ok' }));
+  app.get('/api/v2/setup/status', async () => ({ required: !(await store.users()).root }));
+  app.post('/api/v2/setup', async (request, reply) => store.exclusive(async () => {
+    const body = z.object({ password }).strict().parse(request.body);
+    const users = await store.users();
+    requireThat(!users.root, 409, 'Root is already initialized');
+    users.root = { passwordHash: await hashPassword(body.password), rights: {}, disabled: false };
+    await store.saveUsers(users);
+    // Le mot de passe ne figure jamais dans l'audit ; seul l'événement initial est conservé.
+    await appendFile(store.file('audit.jsonl'), JSON.stringify({ at: new Date().toISOString(), user: 'root', action: 'system.initialized', target: 'root' }) + '\n', { mode: 0o600 });
+    reply.code(201);
+    return { success: true };
+  }));
   app.get('/api/v2/system', async () => ({ networkMode: transport.mode, units: 'Ko/s', bytesPerKo: 1000, shapingAvailable: transport.mode === 'linux', downEnforcement: 'local-reception', maxNetworkTunnels: transport.mode === 'linux' ? 254 : null }));
   app.get('/api/v2/system/orphans', async request => {
     requireThat(request.user.username === 'root', 403, 'Root required');
@@ -88,7 +101,7 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
   }));
   app.get('/api/v2/users', async request => { await requireManager(request); return Object.entries(await store.users()).map(([name, u]) => publicUser(name, u, request.user)); });
   app.post('/api/v2/users', mutate(async (request, reply) => {
-    await requireManager(request); const body = userInput.parse(request.body); const users = await store.users();
+    requireThat(request.user.username === 'root', 403, 'Root required'); const body = userInput.parse(request.body); const users = await store.users();
     requireThat(!Object.hasOwn(users, body.username) && body.username !== 'root', 409, 'Username unavailable');
     users[body.username] = { passwordHash: await hashPassword(body.password), rights: {}, disabled: false };
     await store.saveUsers(users); await audit(request, 'user.created', body.username); reply.code(201); return publicUser(body.username, users[body.username], request.user);
@@ -210,6 +223,22 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
       } catch { entry.close(); } finally { busy = false; }
     };
     const timer = setInterval(send, 1000); timer.unref(); streams.add(entry); reply.raw.on('close', entry.close); await send();
+  });
+  // Le frontend n'a ni compilation ni dépendance : Fastify sert exactement les
+  // mêmes fichiers statiques que Nginx en production. La liste blanche empêche
+  // toute traversée de répertoire depuis le joker d'URL.
+  const webRoot = path.resolve(frontendDir);
+  const webFiles = new Map([
+    ['/', ['index.html', 'text/html; charset=utf-8']],
+    ['/favicon.svg', ['favicon.svg', 'image/svg+xml']],
+  ]);
+  app.get('/', async (_request, reply) => { const [file, type] = webFiles.get('/'); return reply.type(type).send(await readFile(path.join(webRoot, file))); });
+  app.get('/favicon.svg', async (_request, reply) => { const [file, type] = webFiles.get('/favicon.svg'); return reply.type(type).send(await readFile(path.join(webRoot, file))); });
+  app.get('/assets/*', async (request, reply) => {
+    const relative = request.params['*'];
+    requireThat(/^[a-zA-Z0-9/_-]+\.(css|js)$/.test(relative), 404, 'Asset not found');
+    const type = relative.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/javascript; charset=utf-8';
+    return reply.type(type).send(await readFile(path.join(webRoot, 'assets', relative)));
   });
   app.addHook('preClose', async () => { for (const entry of [...streams]) entry.close(); });
   // Fermer les sessions SSH avant que Fastify rende la main à PM2/systemd.

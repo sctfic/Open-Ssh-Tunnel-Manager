@@ -7,6 +7,11 @@ Codes : 400 entrée invalide, 401 session absente/expirée, 403 droits insuffisa
 
 ## Authentification
 
+`GET /api/v2/setup/status` retourne `{ "required": true }` tant que root n'est
+pas défini. Dans ce seul état, `POST /api/v2/setup` avec un objet
+`{ "password": "…" }` crée root. L'opération est atomique et tout nouvel appel
+retourne 409. L'interface utilise ce mécanisme lors de la première connexion.
+
 `POST /api/v2/auth/login` reçoit `{ "username": "root", "password": "…" }` et
 retourne `{ "token": "…", "expiresAt": "…" }`. Envoyer ensuite
 `Authorization: Bearer <token>` sur chaque requête. Sessions de huit heures,
@@ -29,10 +34,10 @@ Les mots de passe sont hachés avec scrypt.
 | 1 | read | configuration, état, mesures et contrôle des endpoints |
 | 2 | execute | start, stop, restart |
 | 3 | write | configuration, channels, clés et limites |
-| 4 | manage | suppression, droits, création de tunnels/utilisateurs |
+| 4 | manage | suppression, droits et création de tunnels |
 
 Un gestionnaire possédant `manage` sur au moins un tunnel peut créer un tunnel
-et reçoit `manage` dessus. Un nouveau compte n'a aucun droit. Root a tous les
+et reçoit `manage` dessus. Seul root crée et supprime les utilisateurs. Un nouveau compte n'a aucun droit. Root a tous les
 droits, sans pouvoir être supprimé, désactivé ou déclassé. La désactivation et la
 suppression globale des autres comptes sont réservées à root. Les droits sont
 relus à chaque requête et à chaque émission SSE.
@@ -40,7 +45,7 @@ relus à chaque requête et à chaque émission SSE.
 | Route | Corps / résultat | Droit |
 | --- | --- | --- |
 | `GET /api/v2/users` | comptes, sans hashes ni droits hors du périmètre géré | manage |
-| `POST /api/v2/users` | `{ "username": "tech", "password": "…" }` | manage |
+| `POST /api/v2/users` | `{ "username": "tech", "password": "…" }` | root |
 | `PATCH /api/v2/users/:username` | `disabled` et/ou `password` | root |
 | `DELETE /api/v2/users/:username` | supprimer un compte | root |
 | `GET /api/v2/tunnels/:id/rights` | niveaux par compte, root immuable | manage |

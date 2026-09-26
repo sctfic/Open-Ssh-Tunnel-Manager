@@ -1,13 +1,15 @@
-# Open SSH Tunnel Manager — backend v2
+# Open SSH Tunnel Manager
 
 Backend Node.js : API authentifiée, droits cumulés par tunnel, redirections SSH
 `-L`, `-R` et SOCKS5 (`-D`), reconnexion, clés et événements SSE en temps réel.
+Frontend sombre en HTML, CSS et JavaScript natifs, servi sans compilation.
 
 - [API et exemples](docs/backend-api.md)
 - [Installation Linux, Nginx et PM2](docs/deployment.md)
 - [Décisions fonctionnelles](docs/rebuild-decisions.md)
 - [Installation de test sur rpi3.lan](docs/test-host-rpi3.md)
 - [Guide d'intégration des développeurs](docs/developer-guide.md)
+- [Architecture du frontend Vanilla JS](docs/frontend.md)
 
 ## Démarrage local
 
@@ -15,14 +17,13 @@ Node.js >= 22. Une seule instance par répertoire de données.
 
 ```powershell
 npm ci
-$env:OSTM_ROOT_PASSWORD = Read-Host 'Mot de passe root (12 caractères minimum)' -MaskInput
-npm run bootstrap
-Remove-Item Env:OSTM_ROOT_PASSWORD
 $env:OSTM_NETWORK_MODE = 'direct'
 npm start
 ```
 
-L'API écoute sur `127.0.0.1:4000`. Le mode `direct` permet de développer sous
+Ouvrir `http://127.0.0.1:4000` puis définir le mot de passe root lors de la
+première connexion. La commande `npm run bootstrap` reste disponible pour une
+initialisation automatisée. Le mode `direct` permet de développer sous
 Windows ou Linux : il mesure les octets SSH chiffrés mais refuse les limites non
 nulles. En production, utiliser le mode `linux`, par défaut, avec son helper réseau.
 
