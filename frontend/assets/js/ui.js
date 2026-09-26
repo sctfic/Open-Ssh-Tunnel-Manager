@@ -4,6 +4,10 @@ export const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char 
 export const qs = (selector, root = document) => root.querySelector(selector);
 export const qsa = (selector, root = document) => [...root.querySelectorAll(selector)];
 export const appRoot = () => qs('#app');
+// Le mode `v` utilisé par les navigateurs récents impose d'échapper le tiret
+// dans une classe. Une alternative hors classe reste valide sur les navigateurs
+// plus anciens et accepte exactement les identifiants permis par le backend.
+export const identifierPattern = '[a-zA-Z0-9](?:[a-zA-Z0-9_]|-){0,47}';
 
 export function toast(message, kind = 'info') {
   const node = document.createElement('div'); node.className = `toast toast--${kind}`; node.textContent = message;

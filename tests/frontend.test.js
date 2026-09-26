@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sliderRate, rateSlider, channelsHtml, cardHtml } from '../frontend/assets/js/tunnels.js';
+import { identifierPattern } from '../frontend/assets/js/ui.js';
 
 // Tester les transformations métier sans simuler un navigateur entier : les
 // extrémités logarithmiques et le sens -R ne doivent pas dépendre du rendu DOM.
@@ -22,4 +23,11 @@ test('collapsed cards expose execution and management controls according to righ
   assert.match(html, /data-action="stop"\s*>/);
   const reader = cardHtml({ ...tunnel, level: 1 }, false);
   assert.doesNotMatch(reader, /data-action=|data-add-channel|data-delete/);
+});
+test('identifier pattern is valid in modern browsers and matches backend identifiers', () => {
+  // Depuis HTML 2023, `pattern` est compilé avec le flag Unicode `v`. Ce test
+  // protège notamment le tiret, dont les règles d'échappement ont changé.
+  const pattern = new RegExp(`^(?:${identifierPattern})$`, 'v');
+  for (const value of ['user', 'user_name', 'user-name', 'A1']) assert.equal(pattern.test(value), true, value);
+  for (const value of ['', '_user', '-user', 'user name', 'équipe']) assert.equal(pattern.test(value), false, value);
 });
