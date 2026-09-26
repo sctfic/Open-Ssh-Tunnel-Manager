@@ -1,0 +1,20 @@
+{
+    "user": "alban",
+    "ip": "localhost",
+    "ssh_port": 22,
+    "ssh_key": "/home/alban/www/ostm/src/configs/key/Paris_key",
+    "options": {
+        "compression": "yes",
+        "ServerAliveInterval": 10,
+        "ServerAliveCountMax": 3
+    },
+    "bandwidth": {
+        "up": 200,
+        "down": 200
+    },
+    "tunnels": {
+        "-L": {},
+        "-R": {},
+        "-D": {}
+    }
+}
