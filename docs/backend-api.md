@@ -60,7 +60,9 @@ Le formulaire de création utilise `POST /api/v2/tunnels/onboard` (manage), avec
 Le backend établit la connexion initiale, mémorise l'empreinte présentée par le
 serveur (confiance à la première utilisation), puis contrôle cette empreinte pour
 les connexions suivantes. Avec un mot de passe, il génère une paire Ed25519 et
-ajoute la clé publique à `authorized_keys`. Avec une clé, celle-ci doit déjà être
+ajoute la clé publique à `authorized_keys` : `~/.ssh/authorized_keys` normalement,
+ou `/etc/dropbear/authorized_keys` pour root sur OpenWrt avec Dropbear.
+Avec une clé, celle-ci doit déjà être
 autorisée à distance. Une connexion par clé est vérifiée avant création.
 Seul le chemin de la clé privée locale est enregistré dans `ssh_key` ; le mot de
 passe temporaire ne figure ni dans les fichiers, ni dans l'audit, ni dans la réponse.
@@ -163,7 +165,8 @@ et le tunnel suit sa stratégie normale de reconnexion.
 
 `POST /api/v2/tunnels/:id/provision` avec `{ "password": "…" }` génère une clé
 Ed25519 et ajoute la clé publique au `~/.ssh/authorized_keys` de l'utilisateur SSH
-configuré. Le mot de passe n'est pas conservé. Le compte distant doit exister et
+configuré (ou `/etc/dropbear/authorized_keys` pour root sur OpenWrt avec Dropbear).
+Le mot de passe n'est pas conservé. Le compte distant doit exister et
 disposer d'un shell POSIX. Cette connexion temporaire n'est pas soumise aux
 limites réseau du tunnel.
 

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import net from 'node:net';
-import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { once } from 'node:events';
@@ -25,12 +25,21 @@ async function fixture(t) {
   // Le serveur SSH miniature accepte l'authentification et reproduit juste les
   // requêtes nécessaires à OSTM : direct-tcpip, tcpip-forward et exec.
   const dir = await mkdtemp(path.join(os.tmpdir(), 'ostm-ssh-')); const keys = utils.generateKeyPairSync('ed25519', {}); await writeFile(path.join(dir, 'key'), keys.private);
-  const sockets = new Set(), clients = new Set(), reverses = new Set(); let installed = '';
+  const sockets = new Set(), clients = new Set(), reverses = new Set(); let installed = '', installCommand = '';
   const track = s => { sockets.add(s); s.on('error', () => s.destroy()); s.on('close', () => sockets.delete(s)); return s; };
   const echo = net.createServer(s => { track(s); s.pipe(s); }); const echoPort = await listen(echo);
   const server = new Server({ hostKeys: [keys.private] }, client => {
     clients.add(client); client.on('error', () => {}); client.on('close', () => clients.delete(client));
-    client.on('authentication', ctx => ctx.accept());
+    client.on('authentication', ctx => {
+      // Un vrai serveur refuse une clé inconnue : accepter toute authentification
+      // masquerait une installation de clé publique manquante ou incorrecte.
+      if (ctx.method === 'password') return ctx.accept();
+      if (ctx.method !== 'publickey') return ctx.reject();
+      const allowed = [utils.parseKey(keys.private), ...(installed.trim() ? [utils.parseKey(installed.trim())] : [])];
+      const key = allowed.find(k => !(k instanceof Error) && k.getPublicSSH().equals(ctx.key.data));
+      if (key && (!ctx.signature || key.verify(ctx.blob, ctx.signature, ctx.hashAlgo) === true)) ctx.accept();
+      else ctx.reject();
+    });
     client.on('ready', () => {
       client.on('tcpip', (accept, reject, info) => {
         const target = track(net.connect(info.destPort, info.destIP));
@@ -49,7 +58,7 @@ async function fixture(t) {
         } else reject?.();
       });
       client.on('session', accept => {
-        const session = accept(); session.on('exec', acceptExec => { const stream = acceptExec(); stream.on('data', data => { installed += data; }); stream.on('end', () => { stream.exit(0); stream.end(); }); });
+        const session = accept(); session.on('exec', (acceptExec, rejectExec, info) => { installCommand = info.command; const stream = acceptExec(); stream.on('data', data => { installed += data; }); stream.on('end', () => { stream.exit(0); stream.end(); }); });
       });
     });
   });
@@ -60,7 +69,7 @@ async function fixture(t) {
     await rm(dir, { recursive: true, force: true });
   });
   const config = { ip: '127.0.0.1', ssh_port: sshPort, user: 'tester', ssh_key: path.join(dir, 'key'), hostFingerprint: fingerprint(utils.parseKey(keys.private).getPublicSSH()), options: { compression: 'yes', ServerAliveInterval: 10, ServerAliveCountMax: 3 }, bandwidth: { up: 0, down: 0 }, tunnels: { '-L': {}, '-R': {}, '-D': {} } };
-  return { config, echoPort, dir, installed: () => installed };
+  return { config, echoPort, dir, installed: () => installed, installCommand: () => installCommand };
 }
 async function exchange(port, payload) {
   const socket = net.connect(port, '127.0.0.1'); socket.setTimeout(3000, () => socket.destroy(new Error('timeout')));
@@ -135,6 +144,34 @@ test('provision installs only a public key and saves the generated private key l
   const { config, dir, installed } = await fixture(t);
   const file = await provision(config, 'temporary-password', path.join(dir, 'provisioned'));
   assert.ok(utils.parseKey(await readFile(file)).isPrivateKey()); assert.match(installed(), /ssh-ed25519/); assert.equal(installed().includes('PRIVATE'), false);
+});
+
+test('key installation selects OpenWrt root or the standard user directory', { skip: process.platform === 'win32' }, async t => {
+  // Exécuter le vrai shell d'installation dans des répertoires temporaires :
+  // aucun fichier de configuration SSH de la machine de test n'est touché.
+  const { config, dir, installed, installCommand } = await fixture(t);
+  await provision(config, 'temporary-password', path.join(dir, 'generated'));
+  for (const [name, uid, openwrt, dropbear, expected] of [
+    ['openwrt-root', 0, true, true, 'dropbear'],
+    ['openwrt-user', 1000, true, true, 'home/.ssh'],
+    ['openssh-root', 0, false, true, 'home/.ssh'],
+    ['standard-user', 1000, false, false, 'home/.ssh']
+  ]) {
+    const base = path.join(dir, name);
+    await mkdir(path.join(base, 'home'), { recursive: true });
+    if (dropbear) await mkdir(path.join(base, 'dropbear'));
+    if (openwrt) await writeFile(path.join(base, 'openwrt_release'), 'test');
+    const target = path.join(base, expected, 'authorized_keys');
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, 'existing-key\n');
+    const command = installCommand().replace('$(id -u)', String(uid))
+      .replaceAll('/etc/openwrt_release', `${base}/openwrt_release`).replaceAll('/etc/dropbear', `${base}/dropbear`);
+    const child = spawn('/bin/sh', ['-c', command], { env: { ...process.env, HOME: path.join(base, 'home') } });
+    child.stdout.resume(); child.stderr.resume(); const closed = once(child, 'close');
+    child.stdin.end(installed());
+    assert.equal((await closed)[0], 0, name);
+    assert.equal(await readFile(target, 'utf8'), 'existing-key\n' + installed(), name);
+  }
 });
 test('SSH handshake and channels work across the subprocess transport bridge', { timeout: 15000 }, async t => {
   const { config, echoPort } = await fixture(t); const port = await unusedPort();

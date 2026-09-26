@@ -180,7 +180,12 @@ export async function provision(config, password, keyDir) {
       const timer = setTimeout(() => { client.destroy(); reject(new Error('Key installation timed out')); }, 10000);
       // La commande fixe ne contient aucune donnée utilisateur interpolée. La clé
       // publique arrive sur stdin, ce qui évite les problèmes d'échappement shell.
-      client.exec('umask 077; mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh" && cat >> "$HOME/.ssh/authorized_keys" && chmod 600 "$HOME/.ssh/authorized_keys"', (error, stream) => {
+      // OpenWrt place les clés de root dans /etc/dropbear. Les autres comptes
+      // et les serveurs classiques conservent le chemin ~/.ssh habituel.
+      // Tester aussi la présence d'OpenWrt évite de confondre un simple dossier
+      // Dropbear avec la configuration d'un serveur OpenSSH standard.
+      const installCommand = 'umask 077; keydir="$HOME/.ssh"; if [ "$(id -u)" = 0 ] && [ -f /etc/openwrt_release ] && [ -d /etc/dropbear ]; then keydir=/etc/dropbear; fi; mkdir -p "$keydir" && chmod 700 "$keydir" && cat >> "$keydir/authorized_keys" && chmod 600 "$keydir/authorized_keys"';
+      client.exec(installCommand, (error, stream) => {
         if (error) { clearTimeout(timer); return reject(error); }
         stream.on('data', () => {}); stream.stderr.on('data', () => {});
         stream.on('error', e => { clearTimeout(timer); reject(e); });
