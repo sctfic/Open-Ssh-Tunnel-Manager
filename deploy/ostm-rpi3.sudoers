@@ -1,3 +1,4 @@
 Defaults:ostm env_reset
 Defaults:ostm env_delete += "NODE_OPTIONS NODE_PATH"
+# Seul le helper root-owned est autorisé ; `*` représente ses arguments validés.
 ostm ALL=(root) NOPASSWD: NOSETENV: /opt/ostm-runtime/node-v24.21.0-linux-arm64/bin/node /opt/ostm/src/network/helper.js *

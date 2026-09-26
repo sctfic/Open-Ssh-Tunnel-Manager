@@ -12,9 +12,16 @@ import ssh2 from 'ssh2';
 import { SshSession, fingerprint, provision } from '../src/ssh.js';
 import { DirectTransport } from '../src/network/transport.js';
 const { Server, utils } = ssh2;
+
+/**
+ * Banc SSH entièrement local. Il exerce la vraie bibliothèque ssh2, les trois
+ * types de channels et le relais de sous-processus sans dépendre d'Internet.
+ */
 const listen = server => new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', () => resolve(server.address().port)); });
 async function unusedPort() { const server = net.createServer(); const port = await listen(server); await new Promise(r => server.close(r)); return port; }
 async function fixture(t) {
+  // Le serveur SSH miniature accepte l'authentification et reproduit juste les
+  // requêtes nécessaires à OSTM : direct-tcpip, tcpip-forward et exec.
   const dir = await mkdtemp(path.join(os.tmpdir(), 'ostm-ssh-')); const keys = utils.generateKeyPairSync('ed25519', {}); await writeFile(path.join(dir, 'key'), keys.private);
   const sockets = new Set(), clients = new Set(), reverses = new Set(); let installed = '';
   const track = s => { sockets.add(s); s.on('error', () => s.destroy()); s.on('close', () => sockets.delete(s)); return s; };
@@ -71,6 +78,8 @@ test('real SSH carries local and reverse forwarding and measures encrypted trans
   await assert.rejects(exchange(localPort, 'closed'), /ECONNREFUSED/);
 });
 test('SOCKS5 accepts fragmented negotiation and transports a domain target', { timeout: 15000 }, async t => {
+  // Fractionner volontairement la négociation vérifie que le parseur ne suppose
+  // jamais qu'un paquet TCP contient un message SOCKS complet.
   const { config, echoPort } = await fixture(t); const port = await unusedPort();
   config.tunnels['-D'][port] = { name: 'socks', listen_port: port, listen_host: '127.0.0.1' };
   const transport = await new DirectTransport().open('test', config); const session = new SshSession(config, transport, () => {});

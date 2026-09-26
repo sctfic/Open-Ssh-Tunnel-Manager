@@ -14,6 +14,8 @@ const ca = await readFile('/etc/ssl/certs/ostm-rpi3-test.crt');
 const password = (await readFile('/home/alban/.config/ostm-test/root-password', 'utf8')).trim();
 let token;
 async function api(method, path, body) {
+  // Le certificat autosigné est fourni comme autorité explicite. Le test exerce
+  // donc réellement TLS au lieu de désactiver sa validation.
   const payload = body === undefined ? undefined : JSON.stringify(body);
   return new Promise((resolve, reject) => {
     const req = https.request({ hostname: '127.0.0.1', servername: 'rpi3.lan', port: 8443, ca, method, path: `/api/v2${path}`,
@@ -37,11 +39,14 @@ const peers = new Set();
 const echo = net.createServer(s => { peers.add(s); s.on('close', () => peers.delete(s)); s.on('error', () => {}); s.pipe(s); });
 let created = false;
 try {
+  // Le service echo est une destination applicative contrôlée et déterministe.
   await new Promise(r => echo.listen(0, '127.0.0.1', r));
   const reserve = net.createServer(); await new Promise(r => reserve.listen(0, '127.0.0.1', r));
   const listenPort = reserve.address().port; await new Promise(r => reserve.close(r));
   const sshReserve = net.createServer(); await new Promise(r => sshReserve.listen(0, '10.0.0.253', r));
   const sshPort = sshReserve.address().port; await new Promise(r => sshReserve.close(r));
+  // Le sshd principal interdit les forwards. Cette instance OpenSSH éphémère
+  // n'autorise que la clé et la destination nécessaires à ce test.
   await writeFile(`${temporary}/sshd_config`, [
     `Port ${sshPort}`, 'ListenAddress 10.0.0.253', 'HostKey /etc/ssh/ssh_host_ed25519_key',
     `PidFile ${temporary}/sshd.pid`, `AuthorizedKeysFile ${temporary}/authorized_keys`,
@@ -66,6 +71,7 @@ try {
   await api('POST', `/tunnels/${id}/start`);
   const socket = net.connect(listenPort, '127.0.0.1'); await once(socket, 'connect');
   async function exchange(size) {
+    // Les octets aléatoires empêchent la compression SSH de raccourcir le test.
     const payload = randomBytes(size); const received = []; let length = 0;
     const start = performance.now();
     await new Promise((resolve, reject) => {
@@ -77,6 +83,7 @@ try {
     return Math.round(performance.now() - start);
   }
   try {
+    // D'abord Down limitant, puis modification à chaud avec Up limitant.
     const firstMs = await exchange(240000); assert.ok(firstMs >= 1700, `Down limit not applied: ${firstMs}ms`);
     await api('PUT', `/tunnels/${id}/bandwidth`, { up: 50, down: 200 });
     const secondMs = await exchange(120000); assert.ok(secondMs >= 1700, `Up limit not applied: ${secondMs}ms`);
@@ -86,8 +93,10 @@ try {
     console.log(JSON.stringify({ https: true, ssh: 'OpenSSH standard', serviceUser: 'ostm', downTransferMs: firstMs, upTransferMs: secondMs, upBytes: state.metrics.upBytes, downBytes: state.metrics.downBytes }));
   } finally { socket.destroy(); }
   await api('POST', `/tunnels/${id}/restart`);
+  // Restart doit recréer transport, namespace et session sans perdre la config.
   assert.equal((await api('GET', `/tunnels/${id}`)).status, 'running');
 } finally {
+  // Le finally rend le test réexécutable même après une assertion ou une coupure.
   try { if (created) await api('DELETE', `/tunnels/${id}`); }
   finally {
     for (const s of peers) s.destroy(); if (echo.listening) await new Promise(r => echo.close(r));

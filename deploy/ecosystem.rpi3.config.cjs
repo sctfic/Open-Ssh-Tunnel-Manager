@@ -1,5 +1,6 @@
 module.exports = {
   apps: [{
+    // Le Pi conserve son Node système ; OSTM utilise son runtime ARM64 dédié.
     name: 'ostm-test', cwd: '/opt/ostm', script: 'src/server.js',
     interpreter: '/opt/ostm-runtime/node-v24.21.0-linux-arm64/bin/node',
     instances: 1, exec_mode: 'fork', autorestart: true, kill_timeout: 30000,

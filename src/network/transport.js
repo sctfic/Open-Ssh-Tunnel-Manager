@@ -6,17 +6,27 @@ import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const exec = promisify(execFile);
+
+/**
+ * Façade non privilégiée vers helper.js. Le backend ne lance jamais directement
+ * `ip`, `tc` ou `iptables` : sudoers autorise uniquement ce helper validant ses
+ * arguments. Les octets SSH transitent sur stdin/stdout du sous-processus.
+ */
 export class LinuxTransport {
   constructor({ helper = fileURLToPath(new URL('./helper.js', import.meta.url)), node = '/usr/bin/node', sudo = '/usr/bin/sudo' } = {}) { this.helper = path.resolve(helper); this.node = node; this.sudo = sudo; this.mode = 'linux'; }
+  // `sudo -n` échoue au lieu de demander un mot de passe à un service sans terminal.
   args(action, id, rest = []) { return [...(this.sudo ? ['-n', this.node] : []), this.helper, action, ...(id ? [id] : []), ...rest.map(String)]; }
   async call(action, id, rest) { const { stdout } = await exec(this.sudo || this.node, this.args(action, id, rest), { timeout: 45000, maxBuffer: 1024 * 1024 }); return stdout.trim() ? JSON.parse(stdout) : null; }
   async open(id, config) {
+    // Résoudre avant sudo limite l'interface privilégiée à une adresse IPv4 déjà validée.
     const { address } = await lookup(config.ip, { family: 4 });
     await this.call('setup', id, [address, config.ssh_port, config.bandwidth.up, config.bandwidth.down]);
     const child = spawn(this.sudo || this.node, this.args('connect', id), { stdio: ['pipe', 'pipe', 'pipe'] });
+    // ssh2 attend une socket Duplex. Ici, les deux pipes du relais remplissent ce contrat.
     const socket = Duplex.from({ readable: child.stdout, writable: child.stdin });
     socket.on('error', () => {});
     let message = '';
+    // Conserver uniquement la fin de stderr évite une croissance mémoire illimitée.
     child.stderr.on('data', data => { message = (message + data).slice(-2000); });
     child.on('error', error => socket.destroy(error));
     child.on('exit', code => { if (!socket.destroyed) socket.destroy(code ? new Error(message || 'Transport exited') : undefined); });
@@ -30,7 +40,10 @@ export class LinuxTransport {
   async cleanup(id) { await this.call('remove', id); }
   async resources() { return this.call('list'); }
 }
-// Development and integration tests only: encrypted TCP bytes, no network shaping.
+/**
+ * Mode de développement sans privilèges. Il mesure le payload TCP chiffré vu par
+ * Node, mais refuse toute limite non nulle pour ne jamais prétendre simuler `tc`.
+ */
 export class DirectTransport {
   constructor() { this.mode = 'direct'; }
   async open(id, config) {

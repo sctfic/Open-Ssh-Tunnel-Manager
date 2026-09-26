@@ -6,9 +6,14 @@ import path from 'node:path';
 import { buildApp } from '../src/app.js';
 import { hashPassword } from '../src/auth.js';
 
+/**
+ * Tests de contrat HTTP. Le FakeManager isole les règles API et ACL du réseau :
+ * les échanges SSH réels sont couverts séparément dans ssh.test.js.
+ */
 const config = () => ({ ip: '127.0.0.1', user: 'tester', ssh_port: 22, ssh_key: '', hostFingerprint: `SHA256:${'A'.repeat(43)}`, bandwidth: { up: 0, down: 0 }, tunnels: { '-L': {}, '-R': {}, '-D': {} } });
 const secret = 'test-password-long-enough';
 class FakeManager {
+  // Même interface publique que Manager, sans ouvrir de socket ni de processus.
   constructor() { this.states = new Map(); this.calls = []; }
   state(key) { if (!this.states.has(key)) this.states.set(key, { status: 'stopped', desired: 'stopped' }); return this.states.get(key); }
   status(key) { return this.state(key); }
@@ -19,6 +24,8 @@ class FakeManager {
   async close() {}
 }
 async function fixture(t) {
+  // Chaque test reçoit un répertoire de données et des sessions neufs. `t.after`
+  // garantit le nettoyage même lorsqu'une assertion échoue.
   const dir = await mkdtemp(path.join(os.tmpdir(), 'ostm-api-')); const manager = new FakeManager();
   const app = await buildApp({ dataDir: dir, manager, restore: false });
   const hash = await hashPassword(secret); const users = {};
@@ -41,6 +48,7 @@ test('authentication protects reads and all execution endpoints', async t => {
   assert.equal((await call('root', 'GET', '/tunnels/alpha/start')).statusCode, 404);
 });
 test('permission ladder controls actions, editing, management and visibility', async t => {
+  // Cette table implicite vérifie que chaque niveau inclut les niveaux inférieurs.
   const { call, manager } = await fixture(t);
   assert.deepEqual((await call('reader', 'GET', '/tunnels')).json().map(x => x.id), ['alpha']);
   assert.equal((await call('outsider', 'GET', '/tunnels/alpha')).statusCode, 403);
@@ -91,6 +99,8 @@ test('logout invalidates the token and password hashes never appear in user list
   await call('reader', 'POST', '/auth/logout'); assert.equal((await call('reader', 'GET', '/auth/me')).statusCode, 401);
 });
 test('live SSE filters tunnels, applies revocation and closes after logout', { timeout: 30000 }, async t => {
+  // Contrairement à app.inject(), un vrai port est nécessaire pour vérifier une
+  // réponse HTTP maintenue ouverte pendant plusieurs événements SSE.
   const { app, call, tokens } = await fixture(t);
   const address = await app.listen({ host: '127.0.0.1', port: 0 });
   const controller = new AbortController();

@@ -9,7 +9,20 @@ import { LinuxTransport, DirectTransport } from './network/transport.js';
 import { tunnel, id, userInput, password, bandwidth, channelInput, requireThat } from './schema.js';
 import { provision } from './ssh.js';
 
+/**
+ * Construit l'application sans ouvrir de port TCP. Cette séparation permet aux
+ * tests d'utiliser `app.inject()` et d'injecter un faux Manager, tandis que
+ * server.js se limite au démarrage du vrai serveur.
+ *
+ * Dépendances principales :
+ * - Store : fichiers JSON et sérialisation des mutations ;
+ * - Auth : sessions Bearer et droits ;
+ * - Manager : cycle de vie SSH et mesures réseau ;
+ * - Transport : mode Linux privilégié ou mode direct de développement.
+ */
 export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', transport, manager, logger = false, restore = true } = {}) {
+  // Les limites protègent le petit serveur embarqué contre les corps volumineux
+  // et les connexions qui restent silencieuses trop longtemps.
   const app = Fastify({ logger, bodyLimit: 128 * 1024, requestTimeout: 30000, connectionTimeout: 15000, trustProxy: false });
   const store = new Store(dataDir); await store.init();
   const auth = new Auth(store);
@@ -17,6 +30,8 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
   manager ||= new Manager(store, transport);
   const streams = new Set();
   app.decorate('services', { store, auth, manager });
+  // Les erreurs de validation sont détaillées ; les erreurs internes restent
+  // volontairement génériques côté client et complètes dans les logs serveur.
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof z.ZodError) return reply.code(400).send({ error: 'Invalid input', details: error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) });
     const status = error.statusCode || 500;
@@ -24,14 +39,20 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
     reply.code(status).send({ error: status >= 500 ? 'Operation failed; inspect tunnel status or server logs' : error.message });
   });
   app.addHook('onRequest', async request => {
+    // Seuls le healthcheck et le login sont publics. Toutes les autres routes,
+    // y compris les lectures et le flux temps réel, demandent un Bearer token.
     if (request.routeOptions.url === '/health' || request.routeOptions.url === '/api/v2/auth/login') return;
     request.user = await auth.authenticate(request.headers.authorization);
   });
   const audit = async (request, action, target) => {
+    // JSON Lines permet la rotation et l'ingestion sans relire un gros tableau.
     await appendFile(store.file('audit.jsonl'), JSON.stringify({ at: new Date().toISOString(), user: request.user.username, action, target }) + '\n', { mode: 0o600 });
   };
+  // Valide l'identifiant, le niveau cumulé et l'existence du tunnel en un appel.
   const access = async (request, min) => { const key = id.parse(request.params.id); requireThat(level(request.user, key) >= min, 403, 'Insufficient tunnel permissions'); await store.get(key); return key; };
   const requireManager = async request => requireThat(canManage(request.user, await store.configs()), 403, 'Manage permission required');
+  // Un manager ne voit que les ACL des tunnels qu'il gère. Les hashes ne sont
+  // jamais copiés dans l'objet de sortie.
   const publicUser = (username, user, viewer) => ({ username, disabled: !!user.disabled, root: username === 'root', rights: username === 'root' ? {} : Object.fromEntries(Object.entries(user.rights).filter(([key]) => level(viewer, key) >= 4 || viewer.username === username)) });
   const viewTunnel = (key, config, user) => ({ id: key, config, level: level(user, key), ...manager.status(key) });
   const snapshot = async user => Object.entries(await store.configs()).filter(([key]) => level(user, key) >= 1).map(([key, c]) => viewTunnel(key, c, user));
@@ -40,6 +61,7 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
   // Re-read authorization inside the mutation queue so queued revocations take effect.
   const mutate = fn => async (request, reply) => store.exclusive(async () => { request.user = await auth.authenticate(request.headers.authorization); return fn(request, reply); });
 
+  // --- État du service et ressources réseau privilégiées --------------------
   app.get('/health', async () => ({ status: 'ok' }));
   app.get('/api/v2/system', async () => ({ networkMode: transport.mode, units: 'Ko/s', bytesPerKo: 1000, shapingAvailable: transport.mode === 'linux', downEnforcement: 'local-reception', maxNetworkTunnels: transport.mode === 'linux' ? 254 : null }));
   app.get('/api/v2/system/orphans', async request => {
@@ -51,6 +73,7 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
     requireThat(manager.status(key).desired !== 'running', 409, 'Resource belongs to a running or reconnecting tunnel');
     await transport.cleanup(key); await audit(request, 'orphan.removed', key); return { success: true };
   }));
+  // --- Authentification et comptes ------------------------------------------
   app.post('/api/v2/auth/login', async request => {
     const body = z.object({ username: id, password: z.string().min(1).max(1024) }).strict().parse(request.body);
     return auth.login(body.username, body.password, request.ip);
@@ -84,12 +107,14 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
     requireThat(name !== 'root', 403, 'Root cannot be deleted'); const users = await store.users(); requireThat(Object.hasOwn(users, name), 404, 'User not found');
     delete users[name]; await store.saveUsers(users); auth.revoke(name); await audit(request, 'user.deleted', name); return { success: true };
   }));
+  // --- Configuration, droits et cycle de vie des tunnels --------------------
   app.get('/api/v2/tunnels', async request => snapshot(request.user));
   app.get('/api/v2/tunnels/:id', async request => { const key = await access(request, 1); return viewTunnel(key, await store.get(key), request.user); });
   app.post('/api/v2/tunnels', mutate(async (request, reply) => {
     await requireManager(request); const body = z.object({ id, config: tunnel }).strict().parse(request.body);
     const configs = await store.configs(); requireThat(!Object.hasOwn(configs, body.id), 409, 'Tunnel already exists'); checkKeyPath(body.id, body.config);
-    // Clear stale ACL entries before publishing a reused tunnel identifier.
+    // Un identifiant supprimé peut être recréé. Retirer ses anciennes ACL évite
+    // de rendre le nouveau tunnel visible à d'anciens utilisateurs par accident.
     const users = await store.users(); for (const u of Object.values(users)) delete u.rights[body.id];
     if (request.user.username !== 'root') users[request.user.username].rights[body.id] = 4;
     await store.saveUsers(users); await store.put(body.id, body.config); await audit(request, 'tunnel.created', body.id);
@@ -115,6 +140,8 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
     await store.saveUsers(users); await audit(request, 'rights.updated', { tunnel: key, username: name, level: body.level }); return { username: name, level: body.level };
   }));
   for (const action of ['start', 'stop', 'restart']) {
+    // Les routes unitaires et globales partagent le même contrôle de niveau 2.
+    // Une action globale ignore les tunnels non autorisés au lieu de les révéler.
     app.post(`/api/v2/tunnels/:id/${action}`, mutate(async request => { const key = await access(request, 2); await audit(request, `tunnel.${action}`, key); return manager[action](key); }));
     app.post(`/api/v2/actions/${action}`, mutate(async request => {
       const results = [];
@@ -127,9 +154,12 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
   app.put('/api/v2/tunnels/:id/bandwidth', mutate(async request => {
     const key = await access(request, 3); const rates = bandwidth.parse(request.body); const config = await store.get(key);
     await manager.updateLimits(key, rates);
+    // Appliquer d'abord au noyau, puis persister. Si l'écriture échoue, rétablir
+    // les anciennes limites pour garder configuration et réalité synchronisées.
     try { await store.put(key, { ...config, bandwidth: rates }); } catch (e) { await manager.updateLimits(key, config.bandwidth); throw e; }
     await audit(request, 'bandwidth.updated', key); return { ...rates, unit: 'Ko/s', bytesPerKo: 1000 };
   }));
+  // --- Channels SSH et gestion des clés -------------------------------------
   app.post('/api/v2/tunnels/:id/channels', mutate(async (request, reply) => {
     const key = await access(request, 3); const { type, ...channel } = channelInput.parse(request.body); const config = await store.get(key);
     requireThat(manager.status(key).desired === 'stopped', 409, 'Stop the tunnel before editing channels');
@@ -157,16 +187,23 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
     requireThat(!(parsed instanceof Error) && !Array.isArray(parsed) && parsed.isPrivateKey(), 400, 'An unencrypted SSH private key is required');
     requireThat(manager.status(key).desired === 'stopped', 409, 'Stop the tunnel before importing a key');
     const config = await store.get(key); await mkdir(path.dirname(keyPath(key)), { recursive: true, mode: 0o700 });
+    // `wx` refuse d'écraser une clé existante. Une rotation doit donc être une
+    // opération explicite plutôt qu'une conséquence d'un second appel accidentel.
     await writeFile(keyPath(key), body.privateKey, { mode: 0o600, flag: 'wx' });
     await store.put(key, { ...config, ssh_key: keyPath(key) }); await audit(request, 'key.imported', key); return { success: true };
   }));
+  // --- Supervision temps réel ------------------------------------------------
   app.get('/api/v2/events', async (request, reply) => {
     requireThat([...streams].filter(s => s.username === request.user.username).length < 5 && streams.size < 100, 429, 'Too many event streams');
+    // Fastify ne sérialise plus cette réponse : on garde la socket ouverte et on
+    // envoie des événements SSE complets que le frontend peut remplacer en bloc.
     reply.hijack(); reply.raw.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no', Connection: 'keep-alive' });
     const entry = { username: request.user.username, close: () => { clearInterval(timer); streams.delete(entry); reply.raw.end(); } }; let busy = false;
     const send = async () => {
       if (busy || reply.raw.destroyed) return; busy = true;
       try {
+        // Réauthentifier chaque seconde applique immédiatement logout,
+        // désactivation et changement de droits à un flux déjà ouvert.
         const user = await auth.authenticate(request.headers.authorization);
         const data = await snapshot(user);
         if (!reply.raw.write(`event: tunnels\ndata: ${JSON.stringify(data)}\n\n`)) entry.close();
@@ -175,6 +212,7 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
     const timer = setInterval(send, 1000); timer.unref(); streams.add(entry); reply.raw.on('close', entry.close); await send();
   });
   app.addHook('preClose', async () => { for (const entry of [...streams]) entry.close(); });
+  // Fermer les sessions SSH avant que Fastify rende la main à PM2/systemd.
   app.addHook('onClose', async () => { await manager.close(); });
   if (restore) await manager.init();
   return app;

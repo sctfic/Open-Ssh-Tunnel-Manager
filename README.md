@@ -7,6 +7,7 @@ Backend Node.js : API authentifiée, droits cumulés par tunnel, redirections SS
 - [Installation Linux, Nginx et PM2](docs/deployment.md)
 - [Décisions fonctionnelles](docs/rebuild-decisions.md)
 - [Installation de test sur rpi3.lan](docs/test-host-rpi3.md)
+- [Guide d'intégration des développeurs](docs/developer-guide.md)
 
 ## Démarrage local
 

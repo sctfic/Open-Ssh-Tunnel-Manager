@@ -7,7 +7,9 @@ const store = new Store(process.env.OSTM_DATA_DIR || '/var/lib/ostm');
 await store.init();
 const users = await store.users();
 if (!Object.hasOwn(users, 'root')) {
+  // Secret créé sur l'hôte, indépendant du mot de passe SSH d'installation.
   const password = randomBytes(24).toString('base64url');
+  // `wx` garantit qu'un ancien fichier ne sera jamais écrasé silencieusement.
   await writeFile(store.file('initial-root-password'), `${password}\n`, { mode: 0o600, flag: 'wx' });
   users.root = { passwordHash: await hashPassword(password), rights: {}, disabled: false };
   await store.saveUsers(users);

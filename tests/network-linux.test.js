@@ -4,6 +4,10 @@ import net from 'node:net';
 import os from 'node:os';
 import { LinuxTransport } from '../src/network/transport.js';
 
+/**
+ * Test privilégié facultatif. Il crée les mêmes netns/veth/qdisc que la
+ * production ; il doit donc être demandé explicitement sur un hôte Linux isolé.
+ */
 const enabled = process.platform === 'linux' && process.getuid?.() === 0 && process.env.OSTM_LINUX_INTEGRATION === '1';
 test('Linux namespace meters real network bytes and shapes both directions', { skip: !enabled && 'Requires Linux root and OSTM_LINUX_INTEGRATION=1', timeout: 45000 }, async t => {
   const address = Object.values(os.networkInterfaces()).flat().find(i => i.family === 'IPv4' && !i.internal)?.address;
@@ -14,6 +18,8 @@ test('Linux namespace meters real network bytes and shapes both directions', { s
   t.after(async () => { await transport?.close(); await network.cleanup(id); for (const s of peers) s.destroy(); await new Promise(r => echo.close(r)); });
   transport = await network.open(id, { ip: address, ssh_port: echo.address().port, bandwidth: { up: 200, down: 100 } });
   async function exchange(size) {
+    // Le serveur echo renvoie exactement les octets émis : une seule opération
+    // permet donc de mesurer successivement le plafond Up puis le plafond Down.
     const payload = Buffer.alloc(size, 97); let received = 0;
     await new Promise((resolve, reject) => {
       const onData = chunk => { received += chunk.length; if (received === size) { transport.socket.off('data', onData); resolve(); } };

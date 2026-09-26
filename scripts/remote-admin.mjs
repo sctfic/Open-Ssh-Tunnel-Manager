@@ -1,4 +1,10 @@
-// Interactive deployment transport. Credentials stay in memory and are never logged.
+/**
+ * Client SSH interactif réservé au déploiement de test.
+ *
+ * Le mot de passe est lu sans écho, reste en mémoire et n'est jamais inclus dans
+ * une commande ou un fichier. Les commandes suivantes arrivent en JSON sur stdin
+ * pour exécuter et transférer sans reconnecter ni réexposer le secret.
+ */
 import ssh2 from 'ssh2';
 import readline from 'node:readline';
 import { createHash } from 'node:crypto';
@@ -8,6 +14,7 @@ const client = new ssh2.Client();
 async function password() {
   process.stdout.write('SSH password (hidden): ');
   if (!process.stdin.isTTY) throw new Error('A terminal is required for secret input');
+  // Le mode raw empêche le terminal d'afficher les caractères du secret.
   process.stdin.setRawMode(true); process.stdin.resume();
   return new Promise(resolve => {
     let value = '';
@@ -30,6 +37,7 @@ await new Promise((resolve, reject) => {
     hostVerifier: key => {
       const fp = `SHA256:${createHash('sha256').update(key).digest('base64').replace(/=+$/, '')}`;
       console.log(`SSH host fingerprint: ${fp}`);
+      // Avec une empreinte attendue, une clé hôte différente ferme la connexion.
       return !expectedFingerprint || fp === expectedFingerprint;
     }
   });
@@ -46,6 +54,7 @@ for await (const line of input) {
     const command = JSON.parse(line);
     if (command.action === 'close') { input.close(); client.end(); break; }
     if (command.action === 'exec') {
+      // Une limite empêche une commande bloquée de retenir la session indéfiniment.
       await new Promise((resolve, reject) => {
         client.exec(command.command, (err, stream) => {
           if (err) return reject(err);
