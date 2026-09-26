@@ -14,7 +14,15 @@ export function openDialog(title, content, { wide = false, closeOnly = false } =
   dialog.innerHTML = `<div class="dialog__head"><h2>${escapeHtml(title)}</h2><button class="icon-button" data-close aria-label="Fermer">×</button></div><div class="dialog__body"></div>`;
   dialog.querySelector('.dialog__body').append(content); document.body.append(dialog);
   dialog.querySelector('[data-close]').addEventListener('click', () => dialog.close());
-  dialog.addEventListener('click', event => { if (!closeOnly && event.target === dialog) dialog.close(); });
+  // Un glissement commencé dans le contenu puis relâché sur l'arrière-plan ne
+  // doit pas fermer la modale. La fermeture exige un clic complet sur le backdrop.
+  let pressedOnBackdrop = false;
+  dialog.addEventListener('pointerdown', event => { pressedOnBackdrop = event.target === dialog; });
+  dialog.addEventListener('pointerup', event => {
+    if (!closeOnly && pressedOnBackdrop && event.target === dialog) dialog.close();
+    pressedOnBackdrop = false;
+  });
+  dialog.addEventListener('pointercancel', () => { pressedOnBackdrop = false; });
   dialog.addEventListener('cancel', event => { if (closeOnly) event.preventDefault(); });
   dialog.addEventListener('close', () => dialog.remove(), { once: true }); dialog.showModal(); return dialog;
 }

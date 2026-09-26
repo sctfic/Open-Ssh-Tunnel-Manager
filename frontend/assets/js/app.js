@@ -161,7 +161,8 @@ function showCreateTunnel() {
     <p class="muted">Avec un mot de passe, une clé sera générée et installée sur le serveur. Le mot de passe ne sera pas enregistré.</p>
     <button class="button button--primary" type="submit">Connecter et créer le tunnel</button><p class="form-error" role="alert"></p>
   </form>`;
-  const dialog = openDialog('Nouveau tunnel', wrap, { closeOnly: true }); const form = qs('form', wrap);
+  // Échap et un clic complet sur le backdrop ferment cette modale.
+  const dialog = openDialog('Nouveau tunnel', wrap); const form = qs('form', wrap);
   qs('[name="mode"]', form).addEventListener('change', event => {
     const keyMode = event.target.value === 'key';
     qs('[data-password-field]', form).hidden = keyMode;
