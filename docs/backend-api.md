@@ -18,6 +18,7 @@ retourne `{ "token": "…", "expiresAt": "…" }`. Envoyer ensuite
 invalidées au redémarrage. Aucun token dans les URL ou cookies. Dix tentatives de
 connexion par minute et IP ; derrière Nginx, le backend voit l'IP du proxy.
 Les mots de passe sont hachés avec scrypt.
+Le propriétaire choisit librement le mot de passe : une chaîne vide est valide.
 
 - `POST /api/v2/auth/logout` : invalider la session.
 - `GET /api/v2/auth/me` : compte et droits courants.

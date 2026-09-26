@@ -33,7 +33,9 @@ export const tunnel = z.object({
   bandwidth: bandwidth.default({ up: 0, down: 0 }),
   tunnels: channels.default({ '-L': {}, '-R': {}, '-D': {} })
 }).strict();
-export const password = z.string().min(12).max(1024);
+// Le propriétaire de l'instance choisit sa propre politique : une chaîne vide
+// est donc techniquement valide. La limite supérieure protège seulement la RAM.
+export const password = z.string().max(1024);
 export const userInput = z.object({ username: id, password }).strict();
 
 // Erreur métier volontairement exposable au client HTTP.

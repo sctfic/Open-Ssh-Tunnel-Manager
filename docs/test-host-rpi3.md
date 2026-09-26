@@ -40,6 +40,19 @@ fichier initial ne reflétera plus le nouveau mot de passe.
 
 ## Exploitation
 
+Pour réinitialiser root sans exposer le nouveau mot de passe dans une commande
+ou l'historique du shell, arrêter brièvement le service puis lancer l'assistant
+interactif. Il accepte aussi un mot de passe vide : presser simplement Entrée aux
+deux invites.
+
+```sh
+sudo systemctl stop pm2-ostm
+sudo -u ostm env OSTM_DATA_DIR=/var/lib/ostm \
+  /opt/ostm-runtime/node-v24.21.0-linux-arm64/bin/node \
+  /opt/ostm/scripts/reset-root-password.mjs
+sudo systemctl start pm2-ostm
+```
+
 ```sh
 sudo systemctl status pm2-ostm
 sudo systemctl restart pm2-ostm

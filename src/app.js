@@ -88,7 +88,7 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
   }));
   // --- Authentification et comptes ------------------------------------------
   app.post('/api/v2/auth/login', async request => {
-    const body = z.object({ username: id, password: z.string().min(1).max(1024) }).strict().parse(request.body);
+    const body = z.object({ username: id, password: z.string().max(1024) }).strict().parse(request.body);
     return auth.login(body.username, body.password, request.ip);
   });
   app.post('/api/v2/auth/logout', async request => { auth.logout(request.headers.authorization); return { success: true }; });
@@ -112,7 +112,8 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
     const body = z.object({ disabled: z.boolean().optional(), password: password.optional() }).strict().parse(request.body);
     const users = await store.users(); requireThat(Object.hasOwn(users, name), 404, 'User not found');
     if (body.disabled !== undefined) users[name].disabled = body.disabled;
-    if (body.password) users[name].passwordHash = await hashPassword(body.password);
+    // Tester `undefined` permet à root de définir volontairement un mot de passe vide.
+    if (body.password !== undefined) users[name].passwordHash = await hashPassword(body.password);
     await store.saveUsers(users); auth.revoke(name); await audit(request, 'user.updated', name); return publicUser(name, users[name], request.user);
   }));
   app.delete('/api/v2/users/:username', mutate(async request => {

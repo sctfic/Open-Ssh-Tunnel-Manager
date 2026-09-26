@@ -95,6 +95,14 @@ test('first setup creates root once and leaves every other API route protected',
   assert.equal((await app.inject({ method: 'POST', url: '/api/v2/setup', payload: { password: secret } })).statusCode, 409);
   assert.equal((await app.inject({ method: 'POST', url: '/api/v2/auth/login', payload: { username: 'root', password: secret } })).statusCode, 200);
 });
+test('the owner may deliberately use an empty password', async t => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'ostm-empty-password-')); const app = await buildApp({ dataDir: dir, manager: new FakeManager(), restore: false });
+  t.after(async () => { await app.close(); await rm(dir, { recursive: true, force: true }); });
+  assert.equal((await app.inject({ method: 'POST', url: '/api/v2/setup', payload: { password: '' } })).statusCode, 201);
+  const login = await app.inject({ method: 'POST', url: '/api/v2/auth/login', payload: { username: 'root', password: '' } }); assert.equal(login.statusCode, 200);
+  const token = login.json().token;
+  assert.equal((await app.inject({ method: 'PUT', url: '/api/v2/auth/password', headers: { authorization: `Bearer ${token}` }, payload: { currentPassword: '', password: '' } })).statusCode, 200);
+});
 test('validation rejects traversal, arbitrary key paths, unknown configuration and bad channels', async t => {
   const { call } = await fixture(t);
   for (const bad of ['../escape', '-option', 'a/b']) assert.equal((await call('root', 'POST', '/tunnels', { id: bad, config: config() })).statusCode, 400);

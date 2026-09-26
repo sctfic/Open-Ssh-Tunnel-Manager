@@ -21,7 +21,7 @@ $env:OSTM_NETWORK_MODE = 'direct'
 npm start
 ```
 
-Ouvrir `http://127.0.0.1:4000` puis définir le mot de passe root lors de la
+Ouvrir `http://127.0.0.1:4000` puis définir le mot de passe root de votre choix lors de la
 première connexion. La commande `npm run bootstrap` reste disponible pour une
 initialisation automatisée. Le mode `direct` permet de développer sous
 Windows ou Linux : il mesure les octets SSH chiffrés mais refuse les limites non
