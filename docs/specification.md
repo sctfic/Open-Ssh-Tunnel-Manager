@@ -1,4 +1,6 @@
 
+> Cahier des charges historique, complété par [rebuild-decisions.md](rebuild-decisions.md). L'API actuelle est décrite dans [backend-api.md](backend-api.md).
+
 aide moi a implementer le backend OSTM2, en nodeJS
 **OSTM2** (Open SSH Tunnels Manager 2) se veut etre un outil puissant pour gérer des tunnels SSH, qu’il s’agisse de transferts de ports locaux (`-L`), distants (`-R`) ou dynamiques (`-D`).
 

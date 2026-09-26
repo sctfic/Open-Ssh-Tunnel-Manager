@@ -1,0 +1,9 @@
+node_modules/
+.npm-cache/
+.deploy/
+data/
+coverage/
+*.log
+.env
+*.key
+*.key.pub

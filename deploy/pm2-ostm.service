@@ -1,0 +1,20 @@
+[Unit]
+Description=OSTM test backend managed by PM2
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=forking
+User=ostm
+Group=ostm
+Environment=PM2_HOME=/var/lib/ostm/.pm2
+Environment=PATH=/opt/ostm-runtime/node-v24.21.0-linux-arm64/bin:/usr/local/bin:/usr/bin:/bin
+PIDFile=/var/lib/ostm/.pm2/pm2.pid
+ExecStart=/opt/ostm-runtime/node-v24.21.0-linux-arm64/bin/node /usr/local/lib/node_modules/pm2/bin/pm2 resurrect
+ExecReload=/opt/ostm-runtime/node-v24.21.0-linux-arm64/bin/node /usr/local/lib/node_modules/pm2/bin/pm2 reload all
+ExecStop=/opt/ostm-runtime/node-v24.21.0-linux-arm64/bin/node /usr/local/lib/node_modules/pm2/bin/pm2 kill
+Restart=on-failure
+TimeoutStopSec=45
+
+[Install]
+WantedBy=multi-user.target

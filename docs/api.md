@@ -1,3 +1,5 @@
+> Archive de l'ancienne API. Voir [backend-api.md](backend-api.md) pour la nouvelle version.
+
 dans ce projet nous appelerons :
 
 1. Tunnel : la connexion ssh entre le client et le serveur
