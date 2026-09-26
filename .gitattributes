@@ -1,0 +1,4 @@
+# Les scripts exécutés sur Debian doivent conserver LF, y compris lorsqu'ils sont
+# préparés depuis Windows puis empaquetés par `git archive`.
+*.sh text eol=lf
+*.sudoers text eol=lf
