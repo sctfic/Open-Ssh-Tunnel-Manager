@@ -21,7 +21,7 @@ const { Server, utils } = ssh2;
  */
 const listen = server => new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', () => resolve(server.address().port)); });
 async function unusedPort() { const server = net.createServer(); const port = await listen(server); await new Promise(r => server.close(r)); return port; }
-async function fixture(t) {
+async function fixture(t, options = {}) {
   // Le serveur SSH miniature accepte l'authentification et reproduit juste les
   // requêtes nécessaires à OSTM : direct-tcpip, tcpip-forward et exec.
   const dir = await mkdtemp(path.join(os.tmpdir(), 'ostm-ssh-')); const keys = utils.generateKeyPairSync('ed25519', {}); await writeFile(path.join(dir, 'key'), keys.private);
@@ -33,7 +33,7 @@ async function fixture(t) {
     client.on('authentication', ctx => {
       // Un vrai serveur refuse une clé inconnue : accepter toute authentification
       // masquerait une installation de clé publique manquante ou incorrecte.
-      if (ctx.method === 'password') return ctx.accept();
+      if (ctx.method === 'password') return options.rejectPassword ? ctx.reject() : ctx.accept();
       if (ctx.method !== 'publickey') return ctx.reject();
       const allowed = [utils.parseKey(keys.private), ...(installed.trim() ? [utils.parseKey(installed.trim())] : [])];
       const key = allowed.find(k => !(k instanceof Error) && k.getPublicSSH().equals(ctx.key.data));
@@ -58,7 +58,7 @@ async function fixture(t) {
         } else reject?.();
       });
       client.on('session', accept => {
-        const session = accept(); session.on('exec', (acceptExec, rejectExec, info) => { installCommand = info.command; const stream = acceptExec(); stream.on('data', data => { installed += data; }); stream.on('end', () => { stream.exit(0); stream.end(); }); });
+        const session = accept(); session.on('exec', (acceptExec, rejectExec, info) => { installCommand = info.command; const stream = acceptExec(); stream.on('data', data => { installed += data; }); stream.on('end', () => { stream.exit(options.rejectInstall ? 1 : 0); stream.end(); }); });
       });
     });
   });
@@ -101,6 +101,16 @@ test('onboarding API authenticates managers and persists no password', async t =
   assert.equal(saved.hostFingerprint, config.hostFingerprint);
   assert.doesNotMatch(JSON.stringify(saved) + response.body + await readFile(app.services.store.file('audit.jsonl'), 'utf8'), /transient-secret/);
   assert.equal((await app.inject({ method: 'POST', url: '/api/v2/tunnels/onboard', payload, headers })).statusCode, 409);
+});
+
+test('onboarding reports whether password login or public-key installation failed', async t => {
+  const passwordFixture = await fixture(t, { rejectPassword: true });
+  await assert.rejects(onboard({ ...passwordFixture.config, hostFingerprint: undefined }, { password: 'wrong' }, path.join(passwordFixture.dir, 'password-error')),
+    error => error.stage === 'password' && /mot de passe impossible/.test(error.message));
+
+  const installFixture = await fixture(t, { rejectInstall: true });
+  await assert.rejects(onboard({ ...installFixture.config, hostFingerprint: undefined }, { password: 'accepted' }, path.join(installFixture.dir, 'install-error')),
+    error => error.stage === 'install' && /installation de la clé publique/.test(error.message));
 });
 test('real SSH carries local and reverse forwarding and measures encrypted transport', { timeout: 15000 }, async t => {
   const { config, echoPort } = await fixture(t); const localPort = await unusedPort(), reversePort = await unusedPort();

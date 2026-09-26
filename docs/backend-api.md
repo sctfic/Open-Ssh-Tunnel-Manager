@@ -67,6 +67,9 @@ autorisée à distance. Une connexion par clé est vérifiée avant création.
 Seul le chemin de la clé privée locale est enregistré dans `ssh_key` ; le mot de
 passe temporaire ne figure ni dans les fichiers, ni dans l'audit, ni dans la réponse.
 Le tunnel est créé arrêté et sans channels ; ceux-ci peuvent être ajoutés ensuite.
+En cas d'échec, la réponse précise l'étape (`password`, `private-key`, `install` ou
+`verification`) et fournit un message utilisable par l'interface sans exposer le
+détail technique renvoyé par le serveur distant.
 Si la vérification finale échoue après installation distante, la clé publique peut
 rester dans `authorized_keys` et doit être retirée manuellement si nécessaire.
 

@@ -5,6 +5,15 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 const { Client, utils } = ssh2;
 
+/**
+ * Erreur présentable lors de la création d'un tunnel. Le détail technique reste
+ * dans `cause` pour les journaux, tandis que `message` explique l'étape en échec
+ * sans recopier une réponse potentiellement sensible du serveur distant.
+ */
+export class OnboardingError extends Error {
+  constructor(stage, message, cause) { super(message, { cause }); this.name = 'OnboardingError'; this.stage = stage; }
+}
+
 /** Empreinte au même format SHA-256 que `ssh-keygen -lf`. */
 export const fingerprint = key => `SHA256:${createHash('sha256').update(key).digest('base64').replace(/=+$/, '')}`;
 
@@ -172,11 +181,14 @@ export async function provision(config, password, keyDir) {
   const client = new Client(); client.on('error', () => {});
   let written = false;
   try {
-    await ready(client, { ...connectionOptions(config), password });
+    try { await ready(client, { ...connectionOptions(config), password }); }
+    catch (error) {
+      throw new OnboardingError('password', 'Connexion SSH par mot de passe impossible. Vérifiez l’adresse, le port, l’utilisateur, le mot de passe et que le serveur autorise cette authentification.', error);
+    }
     // Sauvegarder d'abord la clé privée : sans elle, la clé publique ajoutée à
     // distance serait inutilisable et difficile à distinguer d'un déchet.
     await writeFile(privateFile, keys.private, { flag: 'wx', mode: 0o600 }); written = true;
-    await new Promise((resolve, reject) => {
+    try { await new Promise((resolve, reject) => {
       const timer = setTimeout(() => { client.destroy(); reject(new Error('Key installation timed out')); }, 10000);
       // La commande fixe ne contient aucune donnée utilisateur interpolée. La clé
       // publique arrive sur stdin, ce qui évite les problèmes d'échappement shell.
@@ -192,7 +204,9 @@ export async function provision(config, password, keyDir) {
         stream.on('close', code => { clearTimeout(timer); code === 0 ? resolve() : reject(new Error('Remote key installation failed')); });
         stream.end(`\n${keys.public}\n`);
       });
-    });
+    }); } catch (error) {
+      throw new OnboardingError('install', 'Connexion SSH réussie, mais le serveur n’a pas permis l’installation de la clé publique. Vérifiez que le compte possède un shell et le droit d’écrire dans son fichier de clés autorisées.', error);
+    }
     return privateFile;
   } catch (e) { if (written) await rm(privateFile, { force: true }); throw e; }
   finally { client.destroy(); }
@@ -213,6 +227,11 @@ export async function onboard(config, credentials, keyDir) {
       ...(privateKey === undefined ? { password: credentials.password } : {}),
       hostVerifier: key => { config.hostFingerprint = fingerprint(key); return true; }
     });
+  } catch (error) {
+    const passwordLogin = privateKey === undefined;
+    throw new OnboardingError(passwordLogin ? 'password' : 'private-key', passwordLogin
+      ? 'Connexion SSH par mot de passe impossible. Vérifiez l’adresse, le port, l’utilisateur, le mot de passe et que le serveur autorise cette authentification.'
+      : 'Connexion SSH avec la clé privée impossible. Vérifiez les paramètres du serveur et que la clé publique correspondante y est autorisée.', error);
   } finally { client.destroy(); }
   const file = path.join(keyDir, 'id_ed25519');
   let written = false;
@@ -226,6 +245,9 @@ export async function onboard(config, credentials, keyDir) {
     // Confirmer que le serveur accepte réellement la clé avant de publier le tunnel.
     const verification = new Client(); verification.on('error', () => {});
     try { await ready(verification, connectionOptions(config, await readFile(file))); }
+    catch (error) {
+      throw new OnboardingError('verification', 'La clé publique a été déposée, mais le serveur refuse ensuite la clé générée. Le serveur utilise peut-être un emplacement de clés particulier ou interdit cette méthode d’authentification.', error);
+    }
     finally { verification.destroy(); }
     return { ...config, ssh_key: file };
   } catch (error) { if (written) await rm(file, { force: true }); throw error; }

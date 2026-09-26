@@ -7,7 +7,7 @@ import { Auth, level, canManage, hashPassword, verifyPassword } from './auth.js'
 import { Manager } from './manager.js';
 import { LinuxTransport, DirectTransport } from './network/transport.js';
 import { tunnel, id, userInput, password, bandwidth, channelInput, requireThat } from './schema.js';
-import { provision, onboard } from './ssh.js';
+import { provision, onboard, OnboardingError } from './ssh.js';
 import { diagnose } from './diagnostics.js';
 
 /**
@@ -136,7 +136,12 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
       options: { compression: 'yes', ServerAliveInterval: 10, ServerAliveCountMax: 3 } };
     let config;
     try { config = tunnel.parse(await onboard(initial, body, path.dirname(keyPath(body.id)))); }
-    catch { return reply.code(400).send({ error: 'Connexion ou installation de clé SSH impossible. Vérifiez les identifiants et les droits du serveur distant.' }); }
+    catch (error) {
+      // Seules les erreurs prévues par le parcours SSH sont exposées. Les autres
+      // conservent une réponse générique afin de ne pas divulguer le serveur.
+      const message = error instanceof OnboardingError ? error.message : 'Création du tunnel SSH impossible. Consultez les journaux du serveur.';
+      return reply.code(400).send({ error: message, stage: error instanceof OnboardingError ? error.stage : 'unknown' });
+    }
     const users = await store.users();
     for (const user of Object.values(users)) delete user.rights[body.id];
     if (request.user.username !== 'root') users[request.user.username].rights[body.id] = 4;
