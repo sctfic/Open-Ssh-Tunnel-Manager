@@ -47,6 +47,16 @@ test('authentication protects reads and all execution endpoints', async t => {
   assert.equal((await call(null, 'GET', '/tunnels')).statusCode, 401);
   assert.equal((await call('root', 'GET', '/tunnels/alpha/start')).statusCode, 404);
 });
+test('sessions last 72 hours and channel diagnostics require read permission', async t => {
+  const { app, call } = await fixture(t);
+  const before = Date.now();
+  const response = await app.inject({ method: 'POST', url: '/api/v2/auth/login', payload: { username: 'root', password: secret } });
+  const expires = Date.parse(response.json().expiresAt);
+  assert.ok(expires >= before + 72 * 3600000 && expires <= Date.now() + 72 * 3600000);
+  assert.equal((await call(null, 'POST', '/tunnels/alpha/diagnostics')).statusCode, 401);
+  assert.equal((await call('outsider', 'POST', '/tunnels/alpha/diagnostics')).statusCode, 403);
+  assert.deepEqual((await call('reader', 'POST', '/tunnels/alpha/diagnostics')).json(), { channels: {} });
+});
 test('permission ladder controls actions, editing, management and visibility', async t => {
   // Cette table implicite vérifie que chaque niveau inclut les niveaux inférieurs.
   const { call, manager } = await fixture(t);

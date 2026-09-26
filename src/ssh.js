@@ -140,6 +140,16 @@ export class SshSession {
     }
     return result;
   }
+  async checkRemoteListener(host, port) {
+    // Tester le port -R depuis le serveur SSH respecte les écoutes loopback.
+    let timedOut = false; let timer;
+    try {
+      return await Promise.race([
+        forwardOut(this.client, host, port).then(stream => { stream.destroy(); return !timedOut; }),
+        new Promise(resolve => { timer = setTimeout(() => { timedOut = true; resolve(false); }, 2500); })
+      ]);
+    } catch { return false; } finally { clearTimeout(timer); }
+  }
   async close() {
     if (this.closed) return;
     this.closed = true;

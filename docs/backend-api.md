@@ -14,7 +14,7 @@ retourne 409. L'interface utilise ce mécanisme lors de la première connexion.
 
 `POST /api/v2/auth/login` reçoit `{ "username": "root", "password": "…" }` et
 retourne `{ "token": "…", "expiresAt": "…" }`. Envoyer ensuite
-`Authorization: Bearer <token>` sur chaque requête. Sessions de huit heures,
+`Authorization: Bearer <token>` sur chaque requête. Sessions de 72 heures,
 invalidées au redémarrage. Aucun token dans les URL ou cookies. Dix tentatives de
 connexion par minute et IP ; derrière Nginx, le backend voit l'IP du proxy.
 Les mots de passe sont hachés avec scrypt.
@@ -136,6 +136,19 @@ explicite. Après redémarrage du backend, seuls les tunnels souhaités actifs s
 relancés.
 
 ## Channels et clés
+
+`POST /api/v2/tunnels/:id/diagnostics` (read) est appelé à chaque dépliage.
+Il retourne `channels`, indexé par type et port, avec deux booléens `tcp` et `icmp`.
+TCP vérifie l'écoute du port de redirection et l'accès à la destination du channel
+via la session SSH. ICMP lance un ping directement depuis la machine backend vers
+la destination, hors tunnel. Un ping filtré ou indisponible donne false.
+SOCKS n'a pas de destination fixe : les deux valeurs sont null.
+L'interface utilise une coche bleue pour TCP, verte pour ICMP, grise sinon.
+
+Le formulaire d'ajout correspond aux extrémités locales/distantes : pour -L,
+l'écoute est locale ; pour -R, elle est distante. Le tunnel doit être arrêté pour
+modifier ses channels. Les sliders de débit couvrent 1 à 10 000 Ko/s sur une
+échelle logarithmique ; l'option Illimité conserve la valeur 0 de l'API.
 
 `POST /api/v2/tunnels/:id/channels` : `type` (`-L`, `-R` ou `-D`), `name`,
 `listen_port`, `listen_host` optionnel et `endpoint_host`/`endpoint_port`

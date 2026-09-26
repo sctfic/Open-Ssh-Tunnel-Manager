@@ -28,7 +28,10 @@ export class Api {
   // fetch et on découpe les événements sur la ligne vide du protocole.
   async streamTunnels(onData, signal) {
     const response = await fetch(`${API_ROOT}/events`, { headers: { Authorization: `Bearer ${this.token}`, Accept: 'text/event-stream' }, signal });
-    if (!response.ok) throw new ApiError('Flux temps réel indisponible', response.status);
+    if (!response.ok) {
+      if (response.status === 401) { this.setToken(''); this.onUnauthorized?.(); }
+      throw new ApiError('Flux temps réel indisponible', response.status);
+    }
     const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = '';
     while (true) {
       const { value, done } = await reader.read(); if (done) break;

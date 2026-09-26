@@ -12,6 +12,7 @@ import ssh2 from 'ssh2';
 import { SshSession, fingerprint, provision, onboard } from '../src/ssh.js';
 import { DirectTransport } from '../src/network/transport.js';
 import { buildApp } from '../src/app.js';
+import { diagnose } from '../src/diagnostics.js';
 const { Server, utils } = ssh2;
 
 /**
@@ -101,6 +102,10 @@ test('real SSH carries local and reverse forwarding and measures encrypted trans
     await session.start(); assert.equal((await exchange(localPort, 'local hello')).toString(), 'local hello');
     assert.equal((await exchange(reversePort, 'reverse hello')).toString(), 'reverse hello');
     const checks = await session.checkChannels(); assert.equal(checks[`-L:${localPort}`].reachable, true); assert.equal(checks[`-R:${reversePort}`].reachable, true);
+    const probes = await diagnose(config, session);
+    assert.equal(probes[`-L:${localPort}`].tcp, true);
+    assert.equal(probes[`-R:${reversePort}`].tcp, true);
+    assert.equal(typeof probes[`-L:${localPort}`].icmp, 'boolean');
     const stats = await transport.stats(); assert.ok(stats.upBytes > 24); assert.ok(stats.downBytes > 24); assert.equal(stats.networkOverheadIncluded, false);
   } finally { await session.close(); }
   await assert.rejects(exchange(localPort, 'closed'), /ECONNREFUSED/);

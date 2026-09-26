@@ -24,7 +24,7 @@ export async function verifyPassword(password, encoded) {
 export const level = (user, key) => user.username === 'root' ? 4 : (Object.hasOwn(user.rights, key) ? user.rights[key] : 0);
 export const canManage = (user, configs) => user.username === 'root' || Object.keys(configs).some(key => level(user, key) === 4);
 export class Auth {
-  constructor(store, { ttl = 8 * 60 * 60 * 1000, maxSessions = 10000 } = {}) { this.store = store; this.ttl = ttl; this.maxSessions = maxSessions; this.sessions = new Map(); this.failures = new Map(); }
+  constructor(store, { ttl = 72 * 60 * 60 * 1000, maxSessions = 10000 } = {}) { this.store = store; this.ttl = ttl; this.maxSessions = maxSessions; this.sessions = new Map(); this.failures = new Map(); }
   // Même en mémoire, on indexe les sessions par digest et non par token brut.
   digest(token) { return createHash('sha256').update(token).digest('hex'); }
   async login(username, password, ip) {

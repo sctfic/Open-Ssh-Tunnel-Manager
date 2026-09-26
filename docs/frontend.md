@@ -11,11 +11,14 @@ les sert directement en production.
 - `assets/js/api.js` contient tous les appels REST et le lecteur SSE authentifié.
 - `assets/js/ui.js` contient les primitives DOM, modales et notifications.
 - `assets/js/app.js` contient l'état, les vues et les interactions métier.
+- `assets/js/tunnels.js` contient les lignes de tunnels, les SVG et les formulaires de channels et débit.
 - `assets/css/app.css` définit les tokens du thème sombre et les composants responsives.
 
 L'état applicatif est volontairement centralisé dans l'objet `state` de
-`app.js`. Une vue reconstruit son DOM depuis cet état après une mutation ou un
-événement SSE. L'ensemble des valeurs issues de l'API est échappé avec
+`app.js`. Le filtre reste monté pendant les événements SSE : les mesures sont
+actualisées dans leurs nœuds existants, et seules les fiches dont la configuration
+ou l'état change sont reconstruites. Cela préserve le focus et les menus ouverts.
+L'ensemble des valeurs issues de l'API est échappé avec
 `escapeHtml` avant insertion dans un gabarit HTML.
 
 ## Parcours de démarrage

@@ -1,9 +1,10 @@
 import { Api } from './api.js';
+import { cardHtml, channelsHtml, bandwidthDialog, channelDialog } from './tunnels.js';
 import { appRoot, escapeHtml, formData, openDialog, plural, qs, qsa, toast } from './ui.js';
 
 // L'état reste volontairement petit et sérialisable. Les vues lisent ce même objet,
 // ce qui rend le chemin des données facile à suivre pour un nouveau développeur.
-const state = { me: null, tunnels: [], filter: '', stream: null, page: 'tunnels', openTunnels: new Set() };
+const state = { me: null, tunnels: [], filter: '', stream: null, page: 'tunnels', openTunnels: new Set(), checks: {}, pendingChecks: new Set() };
 const levels = ['Aucun', 'Lecture', 'Exécution', 'Écriture', 'Gestion'];
 const api = new Api(() => showLogin('Votre session a expiré.'));
 
@@ -35,7 +36,7 @@ function showSetup() {
 }
 
 function showLogin(message = '') {
-  stopStream(); state.me = null;
+  stopStream(); state.me = null; state.openTunnels.clear(); state.checks = {}; state.page = 'tunnels';
   authShell('Connexion', 'Connectez-vous pour consulter et piloter les tunnels autorisés.', `<form id="login-form" class="stack"><label>Utilisateur<input name="username" autocomplete="username" value="root" required></label><label>Mot de passe<input name="password" type="password" autocomplete="current-password"></label><button class="button button--primary" type="submit">Se connecter</button><p class="form-error" role="alert">${escapeHtml(message)}</p></form>`);
   qs('#login-form').addEventListener('submit', async event => {
     event.preventDefault(); const values = formData(event.currentTarget);
@@ -45,50 +46,87 @@ function showLogin(message = '') {
 
 async function showDashboard() {
   appRoot().innerHTML = `<div class="shell"><header class="topbar"><button class="brand brand--button" data-home><span class="brand__mark">⇄</span><span>OSTM</span></button><div class="topbar__actions"><span class="user-chip">${escapeHtml(state.me.username)}${state.me.root ? ' · root' : ''}</span><button class="button button--ghost" data-settings>Paramètres</button><button class="button" data-logout>Déconnexion</button></div></header><main id="content" class="content"></main></div>`;
-  qs('[data-home]').addEventListener('click', () => { state.page = 'tunnels'; renderTunnelPage(); });
+  qs('[data-home]').addEventListener('click', () => { state.page = 'tunnels'; renderTunnelPage(); startStream(); });
   qs('[data-settings]').addEventListener('click', () => { state.page = 'settings'; renderSettings(); });
   qs('[data-logout]').addEventListener('click', async () => { try { await api.request('/auth/logout', { method: 'POST' }); } finally { api.setToken(''); showLogin(); } });
   await refreshTunnels(); startStream(); renderTunnelPage();
 }
 
 function renderTunnelPage() {
-  const visible = state.tunnels.filter(t => JSON.stringify(t).toLocaleLowerCase('fr').includes(state.filter.toLocaleLowerCase('fr')));
-  qs('#content').innerHTML = `<section class="page-head"><div><p class="eyebrow">Vue d’ensemble</p><h1>Tunnels</h1><p class="muted">${plural(state.tunnels.length, 'tunnel')} accessible${state.tunnels.length > 1 ? 's' : ''}</p></div>${state.me.root || state.tunnels.some(t => t.level >= 4) ? '<button class="button button--primary" data-create-tunnel>+ Nouveau tunnel</button>' : ''}</section><div class="toolbar"><label class="search"><span>⌕</span><input id="filter" type="search" placeholder="Filtrer par nom, hôte ou état…" value="${escapeHtml(state.filter)}"><kbd>/</kbd></label></div><section id="tunnel-list" class="tunnel-list">${visible.length ? visible.map(tunnelCard).join('') : '<div class="empty"><strong>Aucun tunnel trouvé</strong><span>Modifiez le filtre ou créez votre premier tunnel.</span></div>'}</section>`;
-  bindTunnelPage();
+  // Le filtre est monté une fois : SSE ne doit jamais remplacer un input actif.
+  if (!qs('#filter')) {
+    qs('#content').innerHTML = '<section class="page-head"><div><p class="eyebrow">Vue d’ensemble</p><h1>Tunnels</h1></div><button class="button button--primary" data-create-tunnel>+ Nouveau tunnel</button></section><div class="toolbar"><label class="search"><span>⌕</span><input id="filter" type="search" placeholder="Filtrer par nom, hôte ou état…"></label></div><section id="tunnel-list" class="tunnel-list"></section>';
+    qs('#filter').value = state.filter;
+    qs('#filter').addEventListener('input', event => { state.filter = event.target.value; renderTunnelPage(); });
+    qs('[data-create-tunnel]').addEventListener('click', showCreateTunnel);
+  }
+  qs('[data-create-tunnel]').hidden = !(state.me.root || state.tunnels.some(t => t.level >= 4));
+  const visible = state.tunnels.filter(t => [t.id, t.config.ip, t.status].join(' ').toLocaleLowerCase('fr').includes(state.filter.toLocaleLowerCase('fr')));
+  const list = qs('#tunnel-list');
+  for (const card of qsa('.tunnel-card', list)) if (!visible.some(t => t.id === card.dataset.id)) card.remove();
+  qs('.empty', list)?.remove();
+  for (const tunnel of visible) {
+    let card = qsa('.tunnel-card', list).find(node => node.dataset.id === tunnel.id);
+    // Les mesures seules ne justifient pas de remplacer boutons, menus et focus.
+    const signature = JSON.stringify([tunnel.config, tunnel.status, tunnel.desired, tunnel.error, tunnel.level]);
+    if (!card || card.dataset.signature !== signature) {
+      const template = document.createElement('template');
+      template.innerHTML = cardHtml(tunnel, state.openTunnels.has(tunnel.id), state.checks[tunnel.id]);
+      const replacement = template.content.firstElementChild; replacement.dataset.signature = signature;
+      if (card) card.replaceWith(replacement); else list.append(replacement);
+      bindCard(replacement, tunnel);
+      card = replacement;
+    }
+    qs('[data-up]', card).textContent = Number(tunnel.metrics?.upKoPerSecond || 0).toFixed(1);
+    qs('[data-down]', card).textContent = Number(tunnel.metrics?.downKoPerSecond || 0).toFixed(1);
+  }
+  if (!visible.length) list.innerHTML = '<div class="empty">Aucun tunnel trouvé.</div>';
 }
 
-function tunnelCard(tunnel) {
-  const config = tunnel.config; const running = tunnel.status === 'running';
-  return `<details class="tunnel-card" data-id="${escapeHtml(tunnel.id)}" ${state.openTunnels.has(tunnel.id) ? 'open' : ''}><summary><div class="status status--${escapeHtml(tunnel.status)}"><span></span>${escapeHtml(statusLabel(tunnel.status))}</div><div class="tunnel-title"><strong>${escapeHtml(tunnel.id)}</strong><span>${escapeHtml(config.user)}@${escapeHtml(config.ip)}:${config.ssh_port}</span></div><div class="metric"><span>↑</span><strong>${Number(tunnel.upKoPerSecond || 0).toFixed(1)}</strong><small>Ko/s</small></div><div class="metric"><span>↓</span><strong>${Number(tunnel.downKoPerSecond || 0).toFixed(1)}</strong><small>Ko/s</small></div><span class="badge">${escapeHtml(levels[tunnel.level])}</span><span class="chevron">⌄</span></summary><div class="tunnel-body"><div class="tunnel-grid"><div><span class="label">Channels</span><strong>${channelCount(tunnel)}</strong></div><div><span class="label">Limite Up</span><strong>${config.bandwidth.up || '∞'} ${config.bandwidth.up ? 'Ko/s' : ''}</strong></div><div><span class="label">Limite Down</span><strong>${config.bandwidth.down || '∞'} ${config.bandwidth.down ? 'Ko/s' : ''}</strong></div><div><span class="label">Compression</span><strong>${config.options.compression === 'yes' ? 'Activée' : 'Désactivée'}</strong></div></div>${tunnel.error ? `<p class="error-box">${escapeHtml(tunnel.error)}</p>` : ''}<div class="channels">${channelsHtml(config.tunnels)}</div><div class="card-actions">${tunnel.level >= 2 ? `<button class="button button--success" data-action="start" ${running ? 'disabled' : ''}>Démarrer</button><button class="button" data-action="stop" ${!running ? 'disabled' : ''}>Arrêter</button><button class="button" data-action="restart">Redémarrer</button>` : ''}<span class="spacer"></span>${tunnel.level >= 3 ? '<button class="button button--ghost" data-bandwidth>Débit</button><button class="button button--ghost" data-edit>Configuration</button>' : ''}${tunnel.level >= 4 ? '<button class="button button--ghost" data-rights>Déléguer</button><button class="button button--danger" data-delete>Supprimer</button>' : ''}</div></div></details>`;
-}
-
-function channelsHtml(groups) {
-  const rows = Object.entries(groups).flatMap(([type, channels]) => Object.values(channels).map(c => `<div class="channel"><span class="badge badge--plain">${type}</span><strong>${escapeHtml(c.name)}</strong><code>${escapeHtml(c.listen_host)}:${c.listen_port}</code><span>→</span><code>${type === '-D' ? 'SOCKS' : `${escapeHtml(c.endpoint_host)}:${c.endpoint_port}`}</code></div>`));
-  return rows.join('') || '<span class="muted">Aucun channel configuré.</span>';
-}
-
-function bindTunnelPage() {
-  qs('#filter').addEventListener('input', event => { state.filter = event.target.value; renderTunnelPage(); qs('#filter').focus(); });
-  qs('[data-create-tunnel]')?.addEventListener('click', () => showConfigDialog());
-  qsa('.tunnel-card').forEach(card => {
-    const tunnel = state.tunnels.find(item => item.id === card.dataset.id);
-    // Un événement SSE reconstruit la liste chaque seconde ; mémoriser ce choix
-    // évite de refermer la fiche que l'utilisateur est en train de consulter.
-    card.addEventListener('toggle', () => card.open ? state.openTunnels.add(card.dataset.id) : state.openTunnels.delete(card.dataset.id));
-    qsa('[data-action]', card).forEach(button => button.addEventListener('click', () => runAction(tunnel, button.dataset.action)));
-    qs('[data-rights]', card)?.addEventListener('click', () => showRights(tunnel));
-    qs('[data-bandwidth]', card)?.addEventListener('click', () => showBandwidth(tunnel));
-    qs('[data-edit]', card)?.addEventListener('click', () => showConfigDialog(tunnel));
-    qs('[data-delete]', card)?.addEventListener('click', () => deleteTunnel(tunnel));
+function bindCard(card, tunnel) {
+  qs('[data-expand]', card).addEventListener('click', () => {
+    const open = !state.openTunnels.has(tunnel.id);
+    if (open) state.openTunnels.add(tunnel.id); else state.openTunnels.delete(tunnel.id);
+    qs('[data-expand]', card).setAttribute('aria-expanded', String(open));
+    qs('[data-expand]', card).setAttribute('aria-label', `${open ? 'Replier' : 'Déplier'} ${tunnel.id}`);
+    qs('.tunnel-body', card).hidden = !open;
+    qs('.chevron', card).textContent = open ? '⌃' : '⌄';
+    if (open) checkTunnel(tunnel);
   });
+  qsa('[data-action]', card).forEach(button => button.addEventListener('click', () => runAction(tunnel, button.dataset.action)));
+  qs('[data-menu]', card)?.addEventListener('click', event => {
+    const menu = qs('.menu-items', card); menu.hidden = !menu.hidden;
+    event.currentTarget.setAttribute('aria-expanded', String(!menu.hidden));
+  });
+  qs('[data-rights]', card)?.addEventListener('click', () => showRights(tunnel));
+  qs('[data-bandwidth]', card)?.addEventListener('click', () => showBandwidth(tunnel));
+  qs('[data-delete]', card)?.addEventListener('click', () => deleteTunnel(tunnel));
+  qs('[data-add-channel]', card)?.addEventListener('click', () => channelDialog(tunnel, async body => {
+    await api.request('/tunnels/' + encodeURIComponent(tunnel.id) + '/channels', { method: 'POST', body });
+    delete state.checks[tunnel.id]; await refreshTunnels(); renderTunnelPage();
+  }));
+}
+
+async function checkTunnel(tunnel) {
+  if (state.pendingChecks.has(tunnel.id)) return;
+  state.pendingChecks.add(tunnel.id); state.checks[tunnel.id] = {};
+  const update = () => {
+    const card = qsa('.tunnel-card').find(node => node.dataset.id === tunnel.id);
+    if (card) qs('.channels', card).innerHTML = channelsHtml(tunnel.config.tunnels, state.checks[tunnel.id]);
+  };
+  update();
+  try { state.checks[tunnel.id] = (await api.request('/tunnels/' + encodeURIComponent(tunnel.id) + '/diagnostics', { method: 'POST' })).channels; }
+  catch (error) { toast(error.message, 'error'); }
+  finally { state.pendingChecks.delete(tunnel.id); update(); }
 }
 
 async function runAction(tunnel, action) { try { await api.request(`/tunnels/${encodeURIComponent(tunnel.id)}/${action}`, { method: 'POST' }); toast(`${tunnel.id} : commande envoyée.`, 'success'); await refreshTunnels(); renderTunnelPage(); } catch (e) { toast(e.message, 'error'); } }
 
 function showBandwidth(tunnel) {
-  const wrap = document.createElement('div'); wrap.innerHTML = `<form class="stack"><p class="muted">Les limites portent sur le flux SSH après compression et chiffrement. 0 signifie illimité.</p><div class="form-grid"><label>Débit montant (Ko/s)<input name="up" type="number" min="0" step="1" value="${tunnel.config.bandwidth.up}"></label><label>Débit descendant (Ko/s)<input name="down" type="number" min="0" step="1" value="${tunnel.config.bandwidth.down}"></label></div><button class="button button--primary" type="submit">Enregistrer</button><p class="form-error"></p></form>`;
-  const dialog = openDialog(`Débit · ${tunnel.id}`, wrap); const form = qs('form', wrap);
-  form.addEventListener('submit', async event => { event.preventDefault(); const v = formData(form); await withSubmit(form, async () => { await api.request(`/tunnels/${encodeURIComponent(tunnel.id)}/bandwidth`, { method: 'PUT', body: { up: Number(v.up), down: Number(v.down) } }); dialog.close(); toast('Limites mises à jour.', 'success'); await refreshTunnels(); renderTunnelPage(); }, qs('.form-error', form)); });
+  bandwidthDialog(tunnel, async body => {
+    await api.request('/tunnels/' + encodeURIComponent(tunnel.id) + '/bandwidth', { method: 'PUT', body });
+    await refreshTunnels(); renderTunnelPage();
+  });
 }
 
 async function showRights(tunnel) {
@@ -119,11 +157,11 @@ function showCreateTunnel() {
     <label>Login SSH<input name="user" autocomplete="off" required></label>
     <label>Authentification<select name="mode"><option value="password">Mot de passe</option><option value="key">Clé privée SSH</option></select></label>
     <label data-password-field>Mot de passe SSH<input name="password" type="password" autocomplete="off"></label>
-    <label data-key-field hidden>Clé privée SSH<textarea name="privateKey" rows="6" spellcheck="false" disabled></textarea></label>
+    <label data-key-field hidden>Clé privée SSH<textarea name="privateKey" rows="6" spellcheck="false" placeholder="Copiez l’intégralité du fichier de clé privée, y compris les lignes -----BEGIN … PRIVATE KEY----- et -----END … PRIVATE KEY-----." disabled></textarea></label>
     <p class="muted">Avec un mot de passe, une clé sera générée et installée sur le serveur. Le mot de passe ne sera pas enregistré.</p>
     <button class="button button--primary" type="submit">Connecter et créer le tunnel</button><p class="form-error" role="alert"></p>
   </form>`;
-  const dialog = openDialog('Nouveau tunnel', wrap); const form = qs('form', wrap);
+  const dialog = openDialog('Nouveau tunnel', wrap, { closeOnly: true }); const form = qs('form', wrap);
   qs('[name="mode"]', form).addEventListener('change', event => {
     const keyMode = event.target.value === 'key';
     qs('[data-password-field]', form).hidden = keyMode;

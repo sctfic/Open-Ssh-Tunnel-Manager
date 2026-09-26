@@ -8,6 +8,7 @@ import { Manager } from './manager.js';
 import { LinuxTransport, DirectTransport } from './network/transport.js';
 import { tunnel, id, userInput, password, bandwidth, channelInput, requireThat } from './schema.js';
 import { provision, onboard } from './ssh.js';
+import { diagnose } from './diagnostics.js';
 
 /**
  * Construit l'application sans ouvrir de port TCP. Cette séparation permet aux
@@ -210,6 +211,21 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
     const key = await access(request, 1); const session = manager.state(key).session;
     requireThat(session && manager.status(key).status === 'running', 409, 'Tunnel is not running'); return { channels: await session.checkChannels() };
   }));
+  // Regrouper les demandes simultanées évite de multiplier les pings quand
+  // plusieurs utilisateurs ouvrent la même fiche. Aucune mutation du tunnel.
+  const diagnostics = new Map();
+  app.post('/api/v2/tunnels/:id/diagnostics', async request => {
+    const key = await access(request, 1);
+    if (!diagnostics.has(key)) {
+      const config = await store.get(key);
+      const session = manager.status(key).status === 'running' ? manager.state(key).session : null;
+      diagnostics.set(key, diagnose(config, session).finally(() => diagnostics.delete(key)));
+    }
+    const channels = await diagnostics.get(key);
+    request.user = await auth.authenticate(request.headers.authorization);
+    await access(request, 1);
+    return { channels };
+  });
   app.post('/api/v2/tunnels/:id/provision', mutate(async request => {
     const key = await access(request, 3); const body = z.object({ password: z.string().min(1).max(1024) }).strict().parse(request.body);
     requireThat(manager.status(key).desired === 'stopped', 409, 'Stop the tunnel before provisioning');
