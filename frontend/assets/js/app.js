@@ -1,5 +1,5 @@
 import { Api } from './api.js';
-import { cardHtml, channelsHtml, bandwidthDialog, channelDialog } from './tunnels.js';
+import { cardHtml, channelsHtml, bandwidthDialog, channelDialog, channelContextMenu } from './tunnels.js';
 import { appRoot, escapeHtml, formData, openDialog, plural, qs, qsa, toast } from './ui.js';
 
 // L'état reste volontairement petit et sérialisable. Les vues lisent ce même objet,
@@ -105,6 +105,14 @@ function bindCard(card, tunnel) {
     await api.request('/tunnels/' + encodeURIComponent(tunnel.id) + '/channels', { method: 'POST', body });
     delete state.checks[tunnel.id]; await refreshTunnels(); renderTunnelPage();
   }));
+  card.addEventListener('contextmenu', event => {
+    const row = event.target.closest('.channel-flow'); if (!row || tunnel.level < 3) return;
+    const changed = async () => { delete state.checks[tunnel.id]; await refreshTunnels(); renderTunnelPage(); };
+    channelContextMenu(event, tunnel, row, {
+      rename: async (type, port, name) => { await api.request(`/tunnels/${encodeURIComponent(tunnel.id)}/channels/${encodeURIComponent(type)}/${port}`, { method: 'PATCH', body: { name } }); await changed(); },
+      remove: async (type, port) => { await api.request(`/tunnels/${encodeURIComponent(tunnel.id)}/channels/${encodeURIComponent(type)}/${port}`, { method: 'DELETE' }); await changed(); }
+    });
+  });
 }
 
 async function checkTunnel(tunnel) {

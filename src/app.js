@@ -198,14 +198,27 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
   // --- Channels SSH et gestion des clés -------------------------------------
   app.post('/api/v2/tunnels/:id/channels', mutate(async (request, reply) => {
     const key = await access(request, 3); const { type, ...channel } = channelInput.parse(request.body); const config = await store.get(key);
-    requireThat(manager.status(key).desired === 'stopped', 409, 'Stop the tunnel before editing channels');
+    const restart = manager.status(key).desired === 'running';
     requireThat(!config.tunnels[type][channel.listen_port], 409, 'Channel already exists'); config.tunnels[type][channel.listen_port] = channel;
-    await store.put(key, tunnel.parse(config)); await audit(request, 'channel.created', key); reply.code(201); return channel;
+    await store.put(key, tunnel.parse(config));
+    if (restart) await manager.restart(key);
+    await audit(request, 'channel.created', { tunnel: key, type, port: channel.listen_port, restarted: restart });
+    reply.code(201); return { ...channel, restarted: restart };
+  }));
+  app.patch('/api/v2/tunnels/:id/channels/:type/:port', mutate(async request => {
+    const key = await access(request, 3); const type = z.enum(['-L', '-R', '-D']).parse(request.params.type); const port = z.coerce.number().int().min(1).max(65535).parse(request.params.port);
+    const body = z.object({ name: z.string().min(1).max(100) }).strict().parse(request.body); const config = await store.get(key);
+    requireThat(config.tunnels[type][port], 404, 'Channel not found'); config.tunnels[type][port].name = body.name;
+    // Le nom n'intervient pas dans la connexion : aucune coupure n'est nécessaire.
+    await store.put(key, tunnel.parse(config)); await audit(request, 'channel.renamed', { tunnel: key, type, port });
+    return config.tunnels[type][port];
   }));
   app.delete('/api/v2/tunnels/:id/channels/:type/:port', mutate(async request => {
     const key = await access(request, 3); const type = z.enum(['-L', '-R', '-D']).parse(request.params.type); const port = z.coerce.number().int().min(1).max(65535).parse(request.params.port);
-    requireThat(manager.status(key).desired === 'stopped', 409, 'Stop the tunnel before editing channels'); const config = await store.get(key);
-    requireThat(config.tunnels[type][port], 404, 'Channel not found'); delete config.tunnels[type][port]; await store.put(key, config); await audit(request, 'channel.deleted', key); return { success: true };
+    const config = await store.get(key); const restart = manager.status(key).desired === 'running';
+    requireThat(config.tunnels[type][port], 404, 'Channel not found'); delete config.tunnels[type][port]; await store.put(key, tunnel.parse(config));
+    if (restart) await manager.restart(key);
+    await audit(request, 'channel.deleted', { tunnel: key, type, port, restarted: restart }); return { success: true, restarted: restart };
   }));
   app.post('/api/v2/tunnels/:id/check', mutate(async request => {
     const key = await access(request, 1); const session = manager.state(key).session;

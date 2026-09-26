@@ -1,4 +1,4 @@
-import { escapeHtml as esc, qs, formData, openDialog } from './ui.js';
+import { escapeHtml as esc, qs, formData, openDialog, toast } from './ui.js';
 
 // SVG locaux : aucun téléchargement externe ni police d'icônes nécessaire.
 const paths = {
@@ -42,26 +42,27 @@ export function channelsHtml(groups, checks = {}) {
     const local = type === '-R' ? `${c.endpoint_host}:${c.endpoint_port}` : `${c.listen_host}:${c.listen_port}`;
     const remote = type === '-R' ? `${c.listen_host}:${c.listen_port}` : type === '-D' ? 'Destination SOCKS dynamique' : `${c.endpoint_host}:${c.endpoint_port}`;
     const badge = (kind, label) => `<span class="probe probe--${kind} ${check[kind] === true ? 'probe--ok' : ''}" title="${label} : ${check[kind] == null ? 'non disponible' : check[kind] ? 'réussi' : 'échoué'}" aria-label="${label} : ${check[kind] == null ? 'non disponible' : check[kind] ? 'réussi' : 'échoué'}">${icon('check')}</span>`;
-    return `<div class="channel-flow"><strong>${esc(c.name)} <small>${type}</small></strong><code>${esc(local)}</code><span class="flow-arrow">${type === '-R' ? '←' : '→'}</span><code>${esc(remote)}</code><span class="probe-pair">${badge('tcp', 'TCP : écoute et destination par le tunnel')}${badge('icmp', 'ICMP direct depuis le backend')}</span></div>`;
+    const arrow = type === '-R' ? '←' : type === '-D' ? '⇢' : '→';
+    return `<div class="channel-flow" data-channel-type="${type}" data-channel-port="${port}" data-channel-name="${esc(c.name)}"><strong>${esc(c.name)}</strong><code>${esc(local)}</code><span class="flow-arrow" title="${type}" aria-label="Redirection ${type}">${arrow}</span><code>${esc(remote)}</code><span class="probe-pair">${badge('tcp', 'TCP : écoute et destination par le tunnel')}${badge('icmp', 'ICMP direct depuis le backend')}</span></div>`;
   })).join('') || '<p class="muted">Aucun channel. Utilisez + pour en ajouter un.</p>';
 }
 
-// 0..1000 représente quatre décades : 1, 10, 100, 1000, 10000 Ko/s.
-export const sliderRate = value => Math.round(10 ** (Number(value) / 250));
-export const rateSlider = value => Math.log10(Math.max(1, Math.min(10000, value || 1))) * 250;
+// 0..1000 représente quatre décades ; le cran 1001 signifie illimité.
+export const sliderRate = value => Number(value) === 1001 ? 0 : Math.round(10 ** (Number(value) / 250));
+export const rateSlider = value => value === 0 ? 1001 : Math.log10(Math.max(1, Math.min(10000, value))) * 250;
 
 export function bandwidthDialog(tunnel, save) {
   const wrap = document.createElement('div');
-  wrap.innerHTML = `<form class="stack"><p class="muted">De 1 Ko/s à 10 000 Ko/s (10 Mo/s), sur le flux SSH chiffré.</p>${['down', 'up'].map(dir => `<label>${dir === 'down' ? '↙ Download' : '↗ Upload'} <output data-output="${dir}"></output><input name="${dir}" type="range" min="0" max="1000" step="1" value="${rateSlider(tunnel.config.bandwidth[dir])}"></label><label class="unlimited"><input type="checkbox" name="${dir}Unlimited" ${tunnel.config.bandwidth[dir] === 0 ? 'checked' : ''}> Illimité</label>`).join('')}<button class="button button--primary" type="submit">Enregistrer</button><p class="form-error" role="alert"></p></form>`;
+  wrap.innerHTML = `<form class="stack"><p class="muted">De 1 Ko/s à 10 000 Ko/s (10 Mo/s), puis un dernier cran Illimité.</p>${['down', 'up'].map(dir => `<label>${dir === 'down' ? '↙ Download' : '↗ Upload'} <output data-output="${dir}"></output><input name="${dir}" type="range" min="0" max="1001" step="1" value="${rateSlider(tunnel.config.bandwidth[dir])}"></label>`).join('')}<button class="button button--primary" type="submit">Enregistrer</button><p class="form-error" role="alert"></p></form>`;
   const dialog = openDialog(`Débit · ${tunnel.id}`, wrap);
   const form = qs('form', wrap);
   const update = () => ['up', 'down'].forEach(dir => {
-    const input = form.elements[dir], unlimited = form.elements[`${dir}Unlimited`].checked;
-    input.disabled = unlimited; qs(`[data-output="${dir}"]`, form).textContent = unlimited ? 'Illimité' : `${sliderRate(input.value)} Ko/s`;
+    const value = sliderRate(form.elements[dir].value);
+    qs(`[data-output="${dir}"]`, form).textContent = value === 0 ? 'Illimité' : `${value} Ko/s`;
   });
   form.addEventListener('input', update); update();
   submit(form, async () => {
-    await save(Object.fromEntries(['up', 'down'].map(dir => [dir, form.elements[`${dir}Unlimited`].checked ? 0 : sliderRate(form.elements[dir].value)])));
+    await save(Object.fromEntries(['up', 'down'].map(dir => [dir, sliderRate(form.elements[dir].value)])));
     dialog.close();
   });
 }
@@ -72,7 +73,7 @@ export function channelDialog(tunnel, save) {
     <label>Nom<input name="name" maxlength="100" required></label>
     <div class="form-grid"><label>IP locale<input name="localHost" value="127.0.0.1" required></label><label>Port local<input name="localPort" type="number" min="1" max="65535" required></label></div>
     <div class="form-grid" data-remote><label>IP distante<input name="remoteHost" value="127.0.0.1" required></label><label>Port distant<input name="remotePort" type="number" min="1" max="65535" required></label></div>
-    <p class="muted">${tunnel.desired !== 'stopped' ? 'Arrêtez le tunnel avant d’ajouter un channel.' : 'Le channel sera activé au prochain démarrage du tunnel.'}</p><button class="button button--primary" type="submit" ${tunnel.desired !== 'stopped' ? 'disabled' : ''}>Ajouter</button><p class="form-error" role="alert"></p></form>`;
+    <p class="muted">${tunnel.desired === 'running' ? 'Le tunnel sera redémarré automatiquement après l’ajout.' : 'Le channel sera activé au prochain démarrage du tunnel.'}</p><button class="button button--primary" type="submit">Ajouter</button><p class="form-error" role="alert"></p></form>`;
   const dialog = openDialog(`Ajouter un channel · ${tunnel.id}`, wrap); const form = qs('form', wrap);
   form.elements.type.addEventListener('change', () => {
     const socks = form.elements.type.value === '-D'; qs('[data-remote]', form).hidden = socks;
@@ -83,6 +84,31 @@ export function channelDialog(tunnel, save) {
     const body = { type: v.type, name: v.name, listen_host: reverse ? v.remoteHost : v.localHost, listen_port: Number(reverse ? v.remotePort : v.localPort) };
     if (v.type !== '-D') Object.assign(body, { endpoint_host: reverse ? v.localHost : v.remoteHost, endpoint_port: Number(reverse ? v.localPort : v.remotePort) });
     await save(body); dialog.close();
+  });
+}
+
+export function channelContextMenu(event, tunnel, row, actions) {
+  event.preventDefault(); document.querySelector('.channel-context')?.remove();
+  const menu = document.createElement('div'); menu.className = 'channel-context';
+  menu.innerHTML = '<button data-rename>Renommer</button><button data-remove>Supprimer</button>';
+  menu.style.left = `${Math.min(event.clientX, innerWidth - 160)}px`;
+  menu.style.top = `${Math.min(event.clientY, innerHeight - 100)}px`;
+  document.body.append(menu);
+  const close = pointer => { if (!menu.contains(pointer.target)) { menu.remove(); document.removeEventListener('pointerdown', close); } };
+  setTimeout(() => document.addEventListener('pointerdown', close));
+  qs('[data-rename]', menu).addEventListener('click', () => {
+    menu.remove(); document.removeEventListener('pointerdown', close);
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `<form class="stack"><label>Nouveau nom<input name="name" maxlength="100" value="${esc(row.dataset.channelName)}" required autofocus></label><button class="button button--primary" type="submit">Renommer</button><p class="form-error" role="alert"></p></form>`;
+    const dialog = openDialog(`Renommer · ${tunnel.id}`, wrap); const form = qs('form', wrap);
+    submit(form, async () => { await actions.rename(row.dataset.channelType, row.dataset.channelPort, formData(form).name); dialog.close(); });
+  });
+  qs('[data-remove]', menu).addEventListener('click', async () => {
+    menu.remove(); document.removeEventListener('pointerdown', close);
+    if (confirm(`Supprimer le channel « ${row.dataset.channelName} » ?`)) {
+      try { await actions.remove(row.dataset.channelType, row.dataset.channelPort); }
+      catch (error) { toast(error.message, 'error'); }
+    }
   });
 }
 

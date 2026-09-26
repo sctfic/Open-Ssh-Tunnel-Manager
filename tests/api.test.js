@@ -19,7 +19,7 @@ class FakeManager {
   status(key) { return this.state(key); }
   async start(key) { this.calls.push(['start', key]); Object.assign(this.state(key), { status: 'running', desired: 'running' }); return this.state(key); }
   async stop(key) { Object.assign(this.state(key), { status: 'stopped', desired: 'stopped' }); return this.state(key); }
-  async restart(key) { return this.start(key); }
+  async restart(key) { this.calls.push(['restart', key]); Object.assign(this.state(key), { status: 'running', desired: 'running' }); return this.state(key); }
   async updateLimits(key, rates) { this.calls.push(['limits', key, rates]); }
   async close() {}
 }
@@ -123,6 +123,18 @@ test('validation rejects traversal, arbitrary key paths, unknown configuration a
   assert.equal((await call('writer', 'POST', '/tunnels/alpha/channels', { type: '-D', name: 'socks', listen_port: 4321 })).statusCode, 409);
   await call('writer', 'POST', '/tunnels/alpha/start');
   assert.equal((await call('writer', 'PUT', '/tunnels/alpha', config())).statusCode, 409);
+});
+test('channel changes restart an active tunnel while rename remains live', async t => {
+  const { call, manager } = await fixture(t);
+  await call('writer', 'POST', '/tunnels/alpha/start'); manager.calls = [];
+  const channel = { type: '-L', name: 'web', listen_host: '127.0.0.1', listen_port: 8080, endpoint_host: '10.0.0.2', endpoint_port: 80 };
+  const added = await call('writer', 'POST', '/tunnels/alpha/channels', channel);
+  assert.equal(added.statusCode, 201); assert.equal(added.json().restarted, true); assert.deepEqual(manager.calls, [['restart', 'alpha']]);
+  manager.calls = [];
+  const renamed = await call('writer', 'PATCH', '/tunnels/alpha/channels/-L/8080', { name: 'intranet' });
+  assert.equal(renamed.statusCode, 200); assert.equal(renamed.json().name, 'intranet'); assert.deepEqual(manager.calls, []);
+  const deleted = await call('writer', 'DELETE', '/tunnels/alpha/channels/-L/8080');
+  assert.equal(deleted.statusCode, 200); assert.equal(deleted.json().restarted, true); assert.deepEqual(manager.calls, [['restart', 'alpha']]);
 });
 test('logout invalidates the token and password hashes never appear in user lists', async t => {
   const { call } = await fixture(t);

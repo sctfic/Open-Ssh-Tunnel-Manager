@@ -146,16 +146,20 @@ SOCKS n'a pas de destination fixe : les deux valeurs sont null.
 L'interface utilise une coche bleue pour TCP, verte pour ICMP, grise sinon.
 
 Le formulaire d'ajout correspond aux extrémités locales/distantes : pour -L,
-l'écoute est locale ; pour -R, elle est distante. Le tunnel doit être arrêté pour
-modifier ses channels. Les sliders de débit couvrent 1 à 10 000 Ko/s sur une
-échelle logarithmique ; l'option Illimité conserve la valeur 0 de l'API.
+l'écoute est locale ; pour -R, elle est distante. Les sliders de débit couvrent
+1 à 10 000 Ko/s sur une échelle logarithmique ; leur dernier cran « Illimité »
+conserve la valeur 0 de l'API.
 
 `POST /api/v2/tunnels/:id/channels` : `type` (`-L`, `-R` ou `-D`), `name`,
 `listen_port`, `listen_host` optionnel et `endpoint_host`/`endpoint_port`
 obligatoires pour `-L` et `-R`. Un channel est identifié par type et port.
 
-`DELETE /api/v2/tunnels/:id/channels/:type/:port` supprime un channel.
-Ces opérations nécessitent `write` et un tunnel arrêté.
+`PATCH /api/v2/tunnels/:id/channels/:type/:port` avec `{ "name": "…" }`
+renomme un channel sans interruption. `DELETE` sur la même URL supprime le
+channel. L'ajout et la suppression nécessitent `write` et redémarrent
+automatiquement le tunnel lorsqu'il était actif ; ils ne demandent plus un arrêt
+préalable. Un échec de redémarrage laisse la nouvelle configuration enregistrée
+et le tunnel suit sa stratégie normale de reconnexion.
 
 `POST /api/v2/tunnels/:id/provision` avec `{ "password": "…" }` génère une clé
 Ed25519 et ajoute la clé publique au `~/.ssh/authorized_keys` de l'utilisateur SSH

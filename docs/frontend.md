@@ -21,6 +21,10 @@ ou l'état change sont reconstruites. Cela préserve le focus et les menus ouver
 L'ensemble des valeurs issues de l'API est échappé avec
 `escapeHtml` avant insertion dans un gabarit HTML.
 
+Un clic droit sur une ligne de channel ouvre les actions Renommer et Supprimer.
+Le nom peut changer sans couper le tunnel ; un ajout ou une suppression redémarre
+automatiquement le tunnel lorsqu'il est actif.
+
 ## Parcours de démarrage
 
 Le navigateur appelle d'abord `GET /api/v2/setup/status`. Si aucun compte root

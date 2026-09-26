@@ -9,7 +9,7 @@
 * { box-sizing: border-box; }
 /* Actions compactes séparées du bouton de dépliage : cliquer sur une commande
    ne déclenche jamais une ouverture ou fermeture accidentelle de la fiche. */
-.tunnel-heading { display: flex; align-items: center; padding: 12px; gap: 12px; }
+.tunnel-heading { display: flex; align-items: center; padding: 12px 0px; gap: 12px; }
 .tunnel-expand { display: flex; align-items: center; flex: 1; min-width: 0; gap: 18px; padding: 8px; color: var(--text); background: none; border: 0; text-align: left; cursor: pointer; }
 .tunnel-expand .tunnel-title { flex: 1; }
 .limits { display: inline-block; margin-left: 12px; color: var(--accent); font-size: .72rem; font-weight: 500; }
@@ -26,14 +26,15 @@
 .channel-flow { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(120px, 1fr) 24px minmax(120px, 1fr) 54px; align-items: center; gap: 12px; padding: 12px 6px; border-bottom: 1px solid var(--line); }
 .channel-flow code { overflow-wrap: anywhere; color: #b8c6de; }
 .channel-flow small { color: var(--muted); font-weight: normal; }
-.flow-arrow { color: var(--accent); font-size: 1.4rem; }
+.flow-arrow { color: var(--accent); font-size: 1.4rem; text-align: center; }
 .probe-pair { display: flex; gap: 8px; }
 .probe { color: #647086; }
 .probe--tcp.probe--ok { color: #55acff; }
 .probe--icmp.probe--ok { color: #49d18b; }
-.stack .unlimited { display: flex; align-items: center; gap: 8px; }
-.stack .unlimited input { width: auto; }
 .stack input[type="range"] { padding: 0; accent-color: var(--accent); }
+.channel-context { position: fixed; z-index: 100; display: grid; width: 150px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); box-shadow: var(--shadow); }
+.channel-context button { padding: 9px 10px; border: 0; border-radius: 6px; color: var(--text); background: transparent; text-align: left; cursor: pointer; }
+.channel-context button:hover { background: var(--surface); }
 @media (max-width: 760px) {
   .tunnel-heading { flex-wrap: wrap; }.tunnel-expand { flex-basis: 100%; gap: 10px; }
   .compact-actions { margin-left: auto; }.live-rates { display: none; }.limits { display: block; margin-left: 0; }
