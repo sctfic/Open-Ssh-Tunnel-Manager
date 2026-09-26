@@ -15,7 +15,10 @@ export function tcpLocal(host, port) {
     const socket = net.connect(port, host);
     const finish = ok => { socket.destroy(); resolve(ok); };
     socket.setTimeout(2500, () => finish(false));
-    socket.once('connect', () => finish(true)); socket.once('error', () => finish(false));
+    // Laisser se terminer le half-close TCP permet au channel SSH créé derrière
+    // le listener de fermer sa compression avant la prochaine opération.
+    socket.once('connect', () => { socket.end(); socket.resume(); });
+    socket.once('close', hadError => resolve(!hadError)); socket.once('error', () => finish(false));
   });
 }
 

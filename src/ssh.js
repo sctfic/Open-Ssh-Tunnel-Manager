@@ -145,7 +145,11 @@ export class SshSession {
     let timedOut = false; let timer;
     try {
       return await Promise.race([
-        forwardOut(this.client, host, port).then(stream => { stream.destroy(); return !timedOut; }),
+        forwardOut(this.client, host, port).then(stream => new Promise(resolve => {
+          if (timedOut) { stream.destroy(); resolve(false); return; }
+          stream.once('close', () => resolve(true)); stream.once('error', () => resolve(false));
+          stream.resume(); stream.end();
+        })),
         new Promise(resolve => { timer = setTimeout(() => { timedOut = true; resolve(false); }, 2500); })
       ]);
     } catch { return false; } finally { clearTimeout(timer); }
