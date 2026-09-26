@@ -178,3 +178,36 @@ export async function provision(config, password, keyDir) {
   } catch (e) { if (written) await rm(privateFile, { force: true }); throw e; }
   finally { client.destroy(); }
 }
+
+/** Première connexion : mémoriser la clé hôte présentée (TOFU), puis toujours
+ * vérifier cette empreinte lors des connexions suivantes, y compris le test clé.
+ * Le mot de passe n'est jamais copié dans la configuration retournée. */
+export async function onboard(config, credentials, keyDir) {
+  const client = new Client(); client.on('error', () => {});
+  const privateKey = credentials.privateKey;
+  if (privateKey !== undefined) {
+    const parsed = utils.parseKey(privateKey);
+    if (parsed instanceof Error || Array.isArray(parsed) || !parsed.isPrivateKey()) throw new Error('Clé privée SSH non chiffrée invalide');
+  }
+  try {
+    await ready(client, { ...connectionOptions(config, privateKey),
+      ...(privateKey === undefined ? { password: credentials.password } : {}),
+      hostVerifier: key => { config.hostFingerprint = fingerprint(key); return true; }
+    });
+  } finally { client.destroy(); }
+  const file = path.join(keyDir, 'id_ed25519');
+  let written = false;
+  try {
+    if (privateKey === undefined) {
+      await provision(config, credentials.password, keyDir); written = true;
+    } else {
+      await mkdir(keyDir, { recursive: true, mode: 0o700 });
+      await writeFile(file, privateKey, { flag: 'wx', mode: 0o600 }); written = true;
+    }
+    // Confirmer que le serveur accepte réellement la clé avant de publier le tunnel.
+    const verification = new Client(); verification.on('error', () => {});
+    try { await ready(verification, connectionOptions(config, await readFile(file))); }
+    finally { verification.destroy(); }
+    return { ...config, ssh_key: file };
+  } catch (error) { if (written) await rm(file, { force: true }); throw error; }
+}

@@ -54,6 +54,20 @@ relus à chaque requête et à chaque émission SSE.
 
 ## Tunnels
 
+Le formulaire de création utilise `POST /api/v2/tunnels/onboard` (manage), avec
+`id`, `ip`, `user`, `ssh_port` (22 par défaut), et exactement un des champs
+`password` (vide accepté) ou `privateKey` (contenu d'une clé privée non chiffrée).
+Le backend établit la connexion initiale, mémorise l'empreinte présentée par le
+serveur (confiance à la première utilisation), puis contrôle cette empreinte pour
+les connexions suivantes. Avec un mot de passe, il génère une paire Ed25519 et
+ajoute la clé publique à `authorized_keys`. Avec une clé, celle-ci doit déjà être
+autorisée à distance. Une connexion par clé est vérifiée avant création.
+Seul le chemin de la clé privée locale est enregistré dans `ssh_key` ; le mot de
+passe temporaire ne figure ni dans les fichiers, ni dans l'audit, ni dans la réponse.
+Le tunnel est créé arrêté et sans channels ; ceux-ci peuvent être ajoutés ensuite.
+Si la vérification finale échoue après installation distante, la clé publique peut
+rester dans `authorized_keys` et doit être retirée manuellement si nécessaire.
+
 `POST /api/v2/tunnels` reçoit un identifiant et une configuration :
 
 ```json

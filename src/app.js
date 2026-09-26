@@ -7,7 +7,7 @@ import { Auth, level, canManage, hashPassword, verifyPassword } from './auth.js'
 import { Manager } from './manager.js';
 import { LinuxTransport, DirectTransport } from './network/transport.js';
 import { tunnel, id, userInput, password, bandwidth, channelInput, requireThat } from './schema.js';
-import { provision } from './ssh.js';
+import { provision, onboard } from './ssh.js';
 
 /**
  * Construit l'application sans ouvrir de port TCP. Cette séparation permet aux
@@ -122,6 +122,27 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
     delete users[name]; await store.saveUsers(users); auth.revoke(name); await audit(request, 'user.deleted', name); return { success: true };
   }));
   // --- Configuration, droits et cycle de vie des tunnels --------------------
+  app.post('/api/v2/tunnels/onboard', mutate(async (request, reply) => {
+    await requireManager(request);
+    const body = z.object({ id, ip: tunnel.shape.ip, user: tunnel.shape.user,
+      ssh_port: tunnel.shape.ssh_port, password: password.optional(),
+      privateKey: z.string().min(32).max(32768).optional()
+    }).strict().refine(v => (v.password !== undefined) !== (v.privateKey !== undefined), 'Choisir un mot de passe ou une clé privée').parse(request.body);
+    requireThat(!Object.hasOwn(await store.configs(), body.id), 409, 'Tunnel already exists');
+    // Construire uniquement les propriétés publiques ; aucun secret temporaire
+    // n'entre dans Store, dans l'audit ou dans la réponse HTTP.
+    const initial = { ip: body.ip, user: body.user, ssh_port: body.ssh_port,
+      options: { compression: 'yes', ServerAliveInterval: 10, ServerAliveCountMax: 3 } };
+    let config;
+    try { config = tunnel.parse(await onboard(initial, body, path.dirname(keyPath(body.id)))); }
+    catch { return reply.code(400).send({ error: 'Connexion ou installation de clé SSH impossible. Vérifiez les identifiants et les droits du serveur distant.' }); }
+    const users = await store.users();
+    for (const user of Object.values(users)) delete user.rights[body.id];
+    if (request.user.username !== 'root') users[request.user.username].rights[body.id] = 4;
+    await store.saveUsers(users); await store.put(body.id, config);
+    await audit(request, 'tunnel.created', body.id);
+    return reply.code(201).send(viewTunnel(body.id, config, { ...users[request.user.username], username: request.user.username }));
+  }));
   app.get('/api/v2/tunnels', async request => snapshot(request.user));
   app.get('/api/v2/tunnels/:id', async request => { const key = await access(request, 1); return viewTunnel(key, await store.get(key), request.user); });
   app.post('/api/v2/tunnels', mutate(async (request, reply) => {

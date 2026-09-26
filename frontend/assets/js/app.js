@@ -101,10 +101,48 @@ async function showRights(tunnel) {
 }
 
 function showConfigDialog(tunnel = null) {
+  if (!tunnel) return showCreateTunnel();
   const wrap = document.createElement('div'); const config = tunnel?.config || defaultConfig();
   wrap.innerHTML = `<form class="stack"><p class="muted">La configuration suit le format JSON documenté. Les propriétés inconnues sont refusées.</p>${tunnel ? '' : '<label>Identifiant<input name="id" pattern="[a-zA-Z0-9][a-zA-Z0-9_-]{0,47}" required></label>'}<label>Configuration JSON<textarea name="config" rows="18" spellcheck="false">${escapeHtml(JSON.stringify(config, null, 2))}</textarea></label><button class="button button--primary" type="submit">${tunnel ? 'Enregistrer' : 'Créer le tunnel'}</button><p class="form-error"></p></form>`;
   const dialog = openDialog(tunnel ? `Configuration · ${tunnel.id}` : 'Nouveau tunnel', wrap, { wide: true }); const form = qs('form', wrap);
   form.addEventListener('submit', async event => { event.preventDefault(); const v = formData(form); await withSubmit(form, async () => { const parsed = JSON.parse(v.config); await api.request(tunnel ? `/tunnels/${encodeURIComponent(tunnel.id)}` : '/tunnels', { method: tunnel ? 'PUT' : 'POST', body: tunnel ? parsed : { id: v.id, config: parsed } }); dialog.close(); toast(tunnel ? 'Configuration enregistrée.' : 'Tunnel créé.', 'success'); await refreshTunnels(); renderTunnelPage(); }, qs('.form-error', form)); });
+}
+
+// Le choix explicite du mode permet de distinguer un mot de passe vide d'une
+// authentification par clé. Les secrets restent uniquement dans cette modale.
+function showCreateTunnel() {
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `<form class="stack">
+    <label>Identité du tunnel<input name="id" pattern="[a-zA-Z0-9][a-zA-Z0-9_-]{0,47}" required></label>
+    <label>IP ou nom DNS de destination<input name="ip" required></label>
+    <label>Port SSH<input name="ssh_port" type="number" min="1" max="65535" value="22" required></label>
+    <label>Login SSH<input name="user" autocomplete="off" required></label>
+    <label>Authentification<select name="mode"><option value="password">Mot de passe</option><option value="key">Clé privée SSH</option></select></label>
+    <label data-password-field>Mot de passe SSH<input name="password" type="password" autocomplete="off"></label>
+    <label data-key-field hidden>Clé privée SSH<textarea name="privateKey" rows="6" spellcheck="false" disabled></textarea></label>
+    <p class="muted">Avec un mot de passe, une clé sera générée et installée sur le serveur. Le mot de passe ne sera pas enregistré.</p>
+    <button class="button button--primary" type="submit">Connecter et créer le tunnel</button><p class="form-error" role="alert"></p>
+  </form>`;
+  const dialog = openDialog('Nouveau tunnel', wrap); const form = qs('form', wrap);
+  qs('[name="mode"]', form).addEventListener('change', event => {
+    const keyMode = event.target.value === 'key';
+    qs('[data-password-field]', form).hidden = keyMode;
+    qs('[data-key-field]', form).hidden = !keyMode;
+    qs('[name="password"]', form).disabled = keyMode;
+    qs('[name="privateKey"]', form).disabled = !keyMode;
+  });
+  dialog.addEventListener('close', () => form.reset(), { once: true });
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    await withSubmit(form, async () => {
+      const values = formData(form);
+      const body = { id: values.id, ip: values.ip, user: values.user, ssh_port: Number(values.ssh_port),
+        ...(values.mode === 'key' ? { privateKey: values.privateKey } : { password: values.password }) };
+      await api.request('/tunnels/onboard', { method: 'POST', body });
+      form.reset(); dialog.close(); toast('Tunnel créé, connexion par clé vérifiée.', 'success');
+      await refreshTunnels(); renderTunnelPage();
+    }, qs('.form-error', form));
+  });
 }
 
 async function deleteTunnel(tunnel) {

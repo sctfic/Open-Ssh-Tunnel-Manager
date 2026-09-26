@@ -9,8 +9,9 @@ import { spawn } from 'node:child_process';
 import { Duplex } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import ssh2 from 'ssh2';
-import { SshSession, fingerprint, provision } from '../src/ssh.js';
+import { SshSession, fingerprint, provision, onboard } from '../src/ssh.js';
 import { DirectTransport } from '../src/network/transport.js';
+import { buildApp } from '../src/app.js';
 const { Server, utils } = ssh2;
 
 /**
@@ -64,6 +65,33 @@ async function exchange(port, payload) {
   const socket = net.connect(port, '127.0.0.1'); socket.setTimeout(3000, () => socket.destroy(new Error('timeout')));
   await once(socket, 'connect'); const received = once(socket, 'data'); socket.write(payload); const [data] = await received; socket.destroy(); return data;
 }
+test('onboarding pins the host and stores only a verified private key', async t => {
+  const { config, dir, installed } = await fixture(t);
+  const result = await onboard({ ...config, hostFingerprint: undefined }, { password: 'temporary-secret' }, path.join(dir, 'generated'));
+  assert.equal(result.hostFingerprint, config.hostFingerprint);
+  assert.match(installed(), /ssh-ed25519/);
+  assert.doesNotMatch(JSON.stringify(result), /temporary-secret/);
+  assert.ok(utils.parseKey(await readFile(result.ssh_key)).isPrivateKey());
+  const imported = await onboard({ ...config }, { privateKey: await readFile(config.ssh_key, 'utf8') }, path.join(dir, 'imported'));
+  assert.equal(imported.hostFingerprint, config.hostFingerprint);
+  await assert.rejects(onboard(config, { privateKey: 'invalid' }, path.join(dir, 'bad')), /invalide/);
+});
+test('onboarding API authenticates managers and persists no password', async t => {
+  const { config, dir } = await fixture(t);
+  const app = await buildApp({ dataDir: path.join(dir, 'api'), transport: new DirectTransport(), restore: false });
+  t.after(() => app.close());
+  await app.inject({ method: 'POST', url: '/api/v2/setup', payload: { password: '' } });
+  const login = await app.inject({ method: 'POST', url: '/api/v2/auth/login', payload: { username: 'root', password: '' } });
+  const payload = { id: 'new-tunnel', ip: config.ip, ssh_port: config.ssh_port, user: config.user, password: 'transient-secret' };
+  assert.equal((await app.inject({ method: 'POST', url: '/api/v2/tunnels/onboard', payload })).statusCode, 401);
+  const headers = { authorization: `Bearer ${login.json().token}` };
+  const response = await app.inject({ method: 'POST', url: '/api/v2/tunnels/onboard', payload, headers });
+  assert.equal(response.statusCode, 201, response.body);
+  const saved = await app.services.store.get(payload.id);
+  assert.equal(saved.hostFingerprint, config.hostFingerprint);
+  assert.doesNotMatch(JSON.stringify(saved) + response.body + await readFile(app.services.store.file('audit.jsonl'), 'utf8'), /transient-secret/);
+  assert.equal((await app.inject({ method: 'POST', url: '/api/v2/tunnels/onboard', payload, headers })).statusCode, 409);
+});
 test('real SSH carries local and reverse forwarding and measures encrypted transport', { timeout: 15000 }, async t => {
   const { config, echoPort } = await fixture(t); const localPort = await unusedPort(), reversePort = await unusedPort();
   config.tunnels['-L'][localPort] = { name: 'local', listen_port: localPort, listen_host: '127.0.0.1', endpoint_host: '127.0.0.1', endpoint_port: echoPort };
