@@ -82,6 +82,12 @@ test('permission ladder controls actions, editing, management and visibility', a
   assert.equal((await call('executor', 'POST', '/tunnels/start', { ids: ['missing'] })).statusCode, 404);
   assert.equal((await call('executor', 'POST', '/tunnels/start', { ids: ['alpha', 'alpha'] })).statusCode, 400);
 });
+test('user list reports how many existing tunnels each account can see', async t => {
+  const { call } = await fixture(t);
+  const users = await call('manager', 'GET', '/users'); assert.equal(users.statusCode, 200);
+  const counts = Object.fromEntries(users.json().map(user => [user.username, user.tunnelCount]));
+  assert.equal(counts.root, 2); assert.equal(counts.reader, 1); assert.equal(counts.manager, 1); assert.equal(counts.outsider, 0);
+});
 test('root is immutable and rights revocation applies to an existing session', async t => {
   const { call } = await fixture(t);
   for (const user of ['manager', 'root']) assert.equal((await call(user, 'PUT', '/tunnels/alpha/rights/root', { level: 0 })).statusCode, 403);
@@ -132,6 +138,8 @@ test('validation rejects traversal, arbitrary key paths, unknown configuration a
   assert.equal((await call('writer', 'POST', '/tunnels/alpha/channels', { type: '-L', name: 'bad', listen_port: 4321 })).statusCode, 400);
   assert.equal((await call('writer', 'POST', '/tunnels/alpha/channels', { type: '-D', name: 'socks', listen_port: 4321 })).statusCode, 201);
   assert.equal((await call('writer', 'POST', '/tunnels/alpha/channels', { type: '-D', name: 'socks', listen_port: 4321 })).statusCode, 409);
+  const wildcardPort = await unusedPort();
+  assert.equal((await call('writer', 'POST', '/tunnels/alpha/channels', { type: '-L', name: 'shared', listen_host: '', listen_port: wildcardPort, endpoint_host: '127.0.0.1', endpoint_port: 80 })).statusCode, 201);
   await call('writer', 'POST', '/tunnels/alpha/start');
   assert.equal((await call('writer', 'PUT', '/tunnels/alpha', config())).statusCode, 409);
 });

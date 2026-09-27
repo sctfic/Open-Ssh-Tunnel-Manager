@@ -55,7 +55,13 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
   const requireManager = async request => requireThat(canManage(request.user, await store.configs()), 403, 'Manage permission required');
   // Un manager ne voit que les ACL des tunnels qu'il gère. Les hashes ne sont
   // jamais copiés dans l'objet de sortie.
-  const publicUser = (username, user, viewer) => ({ username, disabled: !!user.disabled, root: username === 'root', rights: username === 'root' ? {} : Object.fromEntries(Object.entries(user.rights).filter(([key]) => level(viewer, key) >= 4 || viewer.username === username)) });
+  const publicUser = (username, user, viewer, configs) => ({
+    username, disabled: !!user.disabled, root: username === 'root',
+    // Root voit toujours tous les tunnels. Pour les autres comptes, un niveau
+    // read ou supérieur suffit pour que le tunnel apparaisse dans leur liste.
+    tunnelCount: Object.keys(configs).filter(key => username === 'root' || level({ ...user, username }, key) >= 1).length,
+    rights: username === 'root' ? {} : Object.fromEntries(Object.entries(user.rights).filter(([key]) => level(viewer, key) >= 4 || viewer.username === username))
+  });
   const viewTunnel = (key, config, user) => ({ id: key, config, level: level(user, key), ...manager.status(key) });
   const snapshot = async user => Object.entries(await store.configs()).filter(([key]) => level(user, key) >= 1).map(([key, c]) => viewTunnel(key, c, user));
   const keyPath = key => store.file(`keys/${key}/id_ed25519`);
@@ -93,19 +99,19 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
     return auth.login(body.username, body.password, request.ip);
   });
   app.post('/api/v2/auth/logout', async request => { auth.logout(request.headers.authorization); return { success: true }; });
-  app.get('/api/v2/auth/me', async request => publicUser(request.user.username, request.user, request.user));
+  app.get('/api/v2/auth/me', async request => publicUser(request.user.username, request.user, request.user, await store.configs()));
   app.put('/api/v2/auth/password', mutate(async request => {
     const body = z.object({ currentPassword: z.string().max(1024), password }).strict().parse(request.body);
     requireThat(await verifyPassword(body.currentPassword, request.user.passwordHash), 403, 'Current password is incorrect');
     const users = await store.users(); users[request.user.username].passwordHash = await hashPassword(body.password); await store.saveUsers(users);
     auth.revoke(request.user.username); await audit(request, 'password.changed', request.user.username); return { success: true, loginRequired: true };
   }));
-  app.get('/api/v2/users', async request => { await requireManager(request); return Object.entries(await store.users()).map(([name, u]) => publicUser(name, u, request.user)); });
+  app.get('/api/v2/users', async request => { await requireManager(request); const configs = await store.configs(); return Object.entries(await store.users()).map(([name, u]) => publicUser(name, u, request.user, configs)); });
   app.post('/api/v2/users', mutate(async (request, reply) => {
     requireThat(request.user.username === 'root', 403, 'Root required'); const body = userInput.parse(request.body); const users = await store.users();
     requireThat(!Object.hasOwn(users, body.username) && body.username !== 'root', 409, 'Username unavailable');
     users[body.username] = { passwordHash: await hashPassword(body.password), rights: {}, disabled: false };
-    await store.saveUsers(users); await audit(request, 'user.created', body.username); reply.code(201); return publicUser(body.username, users[body.username], request.user);
+    await store.saveUsers(users); await audit(request, 'user.created', body.username); reply.code(201); return publicUser(body.username, users[body.username], request.user, await store.configs());
   }));
   app.patch('/api/v2/users/:username', mutate(async request => {
     requireThat(request.user.username === 'root', 403, 'Root required'); const name = id.parse(request.params.username);
@@ -115,7 +121,7 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
     if (body.disabled !== undefined) users[name].disabled = body.disabled;
     // Tester `undefined` permet à root de définir volontairement un mot de passe vide.
     if (body.password !== undefined) users[name].passwordHash = await hashPassword(body.password);
-    await store.saveUsers(users); auth.revoke(name); await audit(request, 'user.updated', name); return publicUser(name, users[name], request.user);
+    await store.saveUsers(users); auth.revoke(name); await audit(request, 'user.updated', name); return publicUser(name, users[name], request.user, await store.configs());
   }));
   app.delete('/api/v2/users/:username', mutate(async request => {
     requireThat(request.user.username === 'root', 403, 'Root required'); const name = id.parse(request.params.username);
@@ -256,7 +262,11 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
     if (!diagnostics.has(key)) {
       // Enregistrer la promesse avant le premier await partage aussi la lecture
       // de configuration entre deux demandes arrivant au même instant.
-      diagnostics.set(key, store.get(key).then(config => diagnose(config)).finally(() => diagnostics.delete(key)));
+      diagnostics.set(key, store.get(key).then(config => {
+        const state = manager.state(key);
+        const session = manager.status(key).status === 'running' ? state.session : null;
+        return diagnose(config, session);
+      }).finally(() => diagnostics.delete(key)));
     }
     const channels = await diagnostics.get(key);
     request.user = await auth.authenticate(request.headers.authorization);

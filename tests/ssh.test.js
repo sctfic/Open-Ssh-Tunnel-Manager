@@ -114,7 +114,11 @@ test('onboarding reports whether password login or public-key installation faile
 });
 test('real SSH carries local and reverse forwarding and measures encrypted transport', { timeout: 15000 }, async t => {
   const { config, echoPort } = await fixture(t); const localPort = await unusedPort(), reversePort = await unusedPort();
+  const closedListenerPort = await unusedPort(), closedEndpointPort = await unusedPort();
   config.tunnels['-L'][localPort] = { name: 'local', listen_port: localPort, listen_host: '127.0.0.1', endpoint_host: '127.0.0.1', endpoint_port: echoPort };
+  // Le listener local de ce channel démarre correctement, mais son équipement
+  // final n'écoute pas : le diagnostic doit donc échouer malgré le port local.
+  config.tunnels['-L'][closedListenerPort] = { name: 'closed-endpoint', listen_port: closedListenerPort, listen_host: '127.0.0.1', endpoint_host: '127.0.0.1', endpoint_port: closedEndpointPort };
   config.tunnels['-R'][reversePort] = { name: 'reverse', listen_port: reversePort, listen_host: '127.0.0.1', endpoint_host: '127.0.0.1', endpoint_port: echoPort };
   const transport = await new DirectTransport().open('test', config); const session = new SshSession(config, transport, () => {});
   try {
@@ -123,6 +127,7 @@ test('real SSH carries local and reverse forwarding and measures encrypted trans
     const checks = await session.checkChannels(); assert.equal(checks[`-L:${localPort}`].reachable, true); assert.equal(checks[`-R:${reversePort}`].reachable, true);
     const probes = await diagnose(config, session);
     assert.equal(typeof probes[`-L:${localPort}`].tcp, 'number');
+    assert.equal(probes[`-L:${closedListenerPort}`].tcp, null);
     assert.equal(typeof probes[`-R:${reversePort}`].tcp, 'number');
     assert.ok(probes[`-L:${localPort}`].icmp === null || typeof probes[`-L:${localPort}`].icmp === 'number');
     const stats = await transport.stats(); assert.ok(stats.upBytes > 24); assert.ok(stats.downBytes > 24); assert.equal(stats.networkOverheadIncluded, false);

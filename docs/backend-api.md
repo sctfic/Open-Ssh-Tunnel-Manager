@@ -45,7 +45,7 @@ relus à chaque requête et à chaque émission SSE.
 
 | Route | Corps / résultat | Droit |
 | --- | --- | --- |
-| `GET /api/v2/users` | comptes, sans hashes ni droits hors du périmètre géré | manage |
+| `GET /api/v2/users` | comptes, nombre de tunnels visibles, sans hashes ni droits hors du périmètre géré | manage |
 | `POST /api/v2/users` | `{ "username": "tech", "password": "…" }` | root |
 | `PATCH /api/v2/users/:username` | `disabled` et/ou `password` | root |
 | `DELETE /api/v2/users/:username` | supprimer un compte | root |
@@ -115,7 +115,8 @@ connexion. Aucun serveur inconnu n'est accepté automatiquement.
 refusés. Les identifiants font 1 à 48 caractères alphanumériques, tirets ou
 underscores et commencent par une lettre ou un chiffre. Les propriétés inconnues,
 notamment `channels` à la place de `tunnels`, sont rejetées. L'adresse d'écoute
-par défaut est `127.0.0.1`.
+par défaut est `127.0.0.1`. Une valeur `listen_host` vide demande une écoute sur
+toutes les interfaces ; l'interface l'affiche sous la forme `*`.
 
 | Route | Fonction | Droit |
 | --- | --- | --- |
@@ -151,22 +152,25 @@ résultats sont conservés pour être visibles dès le dépliage d'un tunnel.
 La réponse `channels`, indexée par type et port, contient directement les délais
 `tcp` et `icmp` en millisecondes. Une valeur null indique un échec ou un test
 inapplicable ; `tcpError` et `icmpError` en donnent la cause.
-TCP ouvre depuis le backend une connexion à l'adresse locale affichée : écoute
-locale pour -L/-D, endpoint local pour -R. Le succès mesure l'établissement TCP,
-pas le service applicatif ni la destination derrière SSH. Timeout absolu : 600 ms,
-résolution DNS incluse, hors attente dans la file des sondes.
+TCP vérifie le port final de l'équipement : pour `-L`, la connexion est ouverte
+depuis le serveur SSH avec `forwardOut` vers `endpoint_host:endpoint_port` ; pour
+`-R`, le backend ouvre directement son endpoint local. Le succès mesure
+l'établissement TCP, sans attendre de protocole applicatif. Timeout absolu :
+600 ms, résolution DNS incluse, hors attente dans la file des sondes.
 ICMP lance un ping direct vers `endpoint_host`, hors tunnel, limité à 600 ms.
-Un ping filtré ou indisponible donne false. SOCKS n'a pas de destination fixe :
-seul ICMP vaut null ; son port TCP local est testé.
+Un ping filtré ou indisponible donne null. SOCKS n'a pas de destination fixe :
+TCP et ICMP valent donc null.
 Les channels sont sondés en parallèle, avec des plafonds globaux de 64 TCP et
 32 pings. Les demandes simultanées d'un même tunnel et les pings simultanés vers
 un même hôte sont mutualisés. Un cycle peut dépasser 30 secondes sous forte charge ;
 son prochain déclenchement est alors ignoré tant que le tunnel est en cours.
 L'interface utilise une coche bleue pour TCP, verte pour ICMP, grise sinon ;
-le temps TCP est disponible au survol de la coche.
+les deux délais sont disponibles au survol des coches.
 
 Le formulaire d'ajout correspond aux extrémités locales/distantes : pour -L,
-l'écoute est locale ; pour -R, elle est distante. Les sliders de débit couvrent
+l'écoute est locale ; pour -R, elle est distante. L'écoute utilise initialement
+`*`, enregistré comme une chaîne vide. Un double-clic l'active avec `0.0.0.0`
+pour permettre une saisie explicite. Les sliders de débit couvrent
 1 à 10 000 Ko/s sur une échelle logarithmique ; leur dernier cran « Illimité »
 conserve la valeur 0 de l'API.
 

@@ -76,22 +76,24 @@ export function tcpLocal(host, port) {
   });
 }
 
-export async function diagnose(config) {
+export async function diagnose(config, session = null) {
   const channels = Object.entries(config.tunnels).flatMap(([type, group]) =>
     Object.entries(group).map(([port, channel]) => ({ type, port, channel })));
   return Object.fromEntries(await Promise.all(channels.map(async ({ type, port, channel }) => {
-    // Pour -R, l'adresse locale affichée est l'endpoint, car l'écoute est distante.
-    // SOCKS possède une écoute locale testable mais aucune destination ICMP fixe.
-    const localHost = type === '-R' ? channel.endpoint_host : channel.listen_host;
-    const localPort = type === '-R' ? channel.endpoint_port : channel.listen_port;
-    const host = localHost === '0.0.0.0' ? '127.0.0.1' : localHost === '::' ? '::1' : localHost;
+    // -L : la destination est ouverte depuis le serveur SSH via forwardOut.
+    // -R : la destination finale se trouve côté backend et est testée ici.
+    // -D : aucune destination fixe n'existe avant une requête SOCKS.
+    const tcpTask = type === '-L'
+      ? session ? () => session.checkEndpoint(channel.endpoint_host, channel.endpoint_port, 600) : null
+      : type === '-R' ? () => tcpLocal(channel.endpoint_host, channel.endpoint_port) : null;
     const [tcp, icmp] = await Promise.all([
-      tcpPool(() => tcpLocal(host, localPort)),
+      tcpTask ? tcpPool(tcpTask) : null,
       type === '-D' ? null : sharedPing(channel.endpoint_host)
     ]);
     // Une valeur numérique est une réussite et représente directement le délai.
     // null signale un échec ou un test inapplicable ; *Error en donne la cause.
-    return [`${type}:${port}`, { tcp: tcp.ok ? tcp.latencyMs : null, tcpError: tcp.error,
+    return [`${type}:${port}`, { tcp: tcp?.ok ? tcp.latencyMs : null,
+      tcpError: tcp?.error ?? (type === '-L' && !session ? 'tunnel-stopped' : null),
       icmp: icmp?.ok ? icmp.latencyMs : null, icmpError: icmp?.error ?? null }];
   })));
 }

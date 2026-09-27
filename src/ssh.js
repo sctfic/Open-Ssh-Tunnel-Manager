@@ -149,6 +149,26 @@ export class SshSession {
     }
     return result;
   }
+  async checkEndpoint(host, port, timeoutMs = 600) {
+    // Pour un -L, forwardOut demande au serveur SSH d'ouvrir lui-même la
+    // connexion vers l'équipement final. Le résultat décrit donc le port de
+    // destination, et non le simple listener local d'OSTM.
+    const start = performance.now();
+    return new Promise(resolve => {
+      let stream; let finished = false;
+      const finish = (ok, error = null) => {
+        if (finished) return; finished = true; clearTimeout(timer); stream?.destroy();
+        resolve({ ok, latencyMs: ok ? Math.round((performance.now() - start) * 10) / 10 : null, error });
+      };
+      const timer = setTimeout(() => finish(false, 'timeout'), timeoutMs);
+      forwardOut(this.client, host, port).then(opened => {
+        stream = opened;
+        if (finished) return opened.destroy();
+        opened.once('error', error => finish(false, error.code || 'connection-error'));
+        finish(true);
+      }).catch(error => finish(false, error.code || 'connection-error'));
+    });
+  }
   async checkRemoteListener(host, port) {
     // Tester le port -R depuis le serveur SSH respecte les écoutes loopback.
     let timedOut = false; let timer;

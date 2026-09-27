@@ -48,9 +48,10 @@ export function cardHtml(tunnel, open, checks = {}) {
 export function channelsHtml(groups, checks = {}) {
   return Object.entries(groups).flatMap(([type, group]) => Object.entries(group).map(([port, c]) => {
     const check = checks[`${type}:${port}`] || {};
+    const address = (host, number) => `${host || '*'}:${number}`;
     // Pour -R, le port d'écoute est distant et la destination est locale.
-    const local = type === '-R' ? `${c.endpoint_host}:${c.endpoint_port}` : `${c.listen_host}:${c.listen_port}`;
-    const remote = type === '-R' ? `${c.listen_host}:${c.listen_port}` : type === '-D' ? 'Destination SOCKS dynamique' : `${c.endpoint_host}:${c.endpoint_port}`;
+    const local = type === '-R' ? address(c.endpoint_host, c.endpoint_port) : address(c.listen_host, c.listen_port);
+    const remote = type === '-R' ? address(c.listen_host, c.listen_port) : type === '-D' ? 'Destination SOCKS dynamique' : address(c.endpoint_host, c.endpoint_port);
     const badge = (kind, label) => {
       const latency = check[kind], ok = typeof latency === 'number' && Number.isFinite(latency);
       const status = ok ? 'réussi' : check[`${kind}Error`] ? 'échoué' : 'non disponible';
@@ -61,7 +62,8 @@ export function channelsHtml(groups, checks = {}) {
       return `<span class="probe probe--${kind} ${ok ? 'probe--ok' : ''}" title="${description}" aria-label="${description}">${icon('check')}</span>`;
     };
     const arrow = type === '-R' ? '←' : type === '-D' ? '⇢' : '→';
-    return `<div class="channel-flow" data-channel-type="${type}" data-channel-port="${port}" data-channel-name="${esc(c.name)}"><strong>${esc(c.name)}</strong><span class="channel-route"><code class="channel-local">${esc(local)}</code><span class="flow-arrow" title="${type}" aria-label="Redirection ${type}">${arrow}</span><code class="channel-remote">${esc(remote)}</code></span><span class="probe-pair">${badge('tcp', `TCP local ${local}`)}${badge('icmp', 'ICMP direct depuis le backend')}</span></div>`;
+    const endpoint = type === '-D' ? null : address(c.endpoint_host, c.endpoint_port);
+    return `<div class="channel-flow" data-channel-type="${type}" data-channel-port="${port}" data-channel-name="${esc(c.name)}"><strong>${esc(c.name)}</strong><span class="channel-route"><code class="channel-local">${esc(local)}</code><span class="flow-arrow" title="${type}" aria-label="Redirection ${type}">${arrow}</span><code class="channel-remote">${esc(remote)}</code></span><span class="probe-pair">${badge('tcp', endpoint ? `TCP vers le port final ${endpoint}` : 'TCP sans destination fixe')}${badge('icmp', 'ICMP direct depuis le backend')}</span></div>`;
   })).join('') || '<p class="muted">Aucun channel. Utilisez + pour en ajouter un.</p>';
 }
 
@@ -89,18 +91,45 @@ export function channelDialog(tunnel, save) {
   const wrap = document.createElement('div');
   wrap.innerHTML = `<form class="stack"><label>Type de redirection<select name="type"><option value="-L">Local (-L) : local → distant</option><option value="-R">Remote (-R) : distant → local</option><option value="-D">SOCKS (-D) : destination dynamique</option></select></label>
     <label>Nom<input name="name" maxlength="100" required></label>
-    <div class="form-grid"><label>IP locale<input name="localHost" value="127.0.0.1" required></label><label>Port local<input name="localPort" type="number" min="1" max="65535" required></label></div>
-    <div class="form-grid" data-remote><label>IP distante<input name="remoteHost" value="127.0.0.1" required></label><label>Port distant<input name="remotePort" type="number" min="1" max="65535" required></label></div>
+    <div class="form-grid"><label data-host-label="localHost">IP locale<input name="localHost" value="127.0.0.1" required></label><label>Port local<input name="localPort" type="number" min="1" max="65535" required></label></div>
+    <div class="form-grid" data-remote><label data-host-label="remoteHost">IP distante<input name="remoteHost" value="127.0.0.1" required></label><label>Port distant<input name="remotePort" type="number" min="1" max="65535" required></label></div>
+    <p class="muted">* écoute sur toutes les interfaces. Double-cliquez sur ce champ pour imposer 0.0.0.0.</p>
     <p class="muted">${tunnel.desired === 'running' ? 'Le tunnel sera redémarré automatiquement après l’ajout.' : 'Le channel sera activé au prochain démarrage du tunnel.'}</p><button class="button button--primary" type="submit">Ajouter</button><p class="form-error" role="alert"></p></form>`;
   const dialog = openDialog(`Ajouter un channel · ${tunnel.id}`, wrap); const form = qs('form', wrap);
-  form.elements.type.addEventListener('change', () => {
-    const socks = form.elements.type.value === '-D'; qs('[data-remote]', form).hidden = socks;
-    form.elements.remoteHost.disabled = socks; form.elements.remotePort.disabled = socks;
-  });
+  const setWildcard = (input, enabled) => {
+    if (enabled) {
+      if (input.value !== '*') input.dataset.explicitAddress = input.value;
+      input.value = '*'; input.disabled = true;
+    } else {
+      input.disabled = false;
+      if (input.value === '*') input.value = input.dataset.explicitAddress || '127.0.0.1';
+    }
+  };
+  const updateType = () => {
+    const type = form.elements.type.value, socks = type === '-D';
+    qs('[data-remote]', form).hidden = socks;
+    setWildcard(form.elements.localHost, type !== '-R');
+    setWildcard(form.elements.remoteHost, type === '-R');
+    // Les champs de destination distante n'existent pas pour SOCKS.
+    if (socks) { form.elements.remoteHost.disabled = true; form.elements.remotePort.disabled = true; }
+    else form.elements.remotePort.disabled = false;
+  };
+  for (const input of [form.elements.localHost, form.elements.remoteHost]) {
+    input.addEventListener('input', () => { input.dataset.explicitAddress = input.value; });
+    qs(`[data-host-label="${input.name}"]`, form).addEventListener('dblclick', event => {
+      // Un input HTML disabled ne reçoit pas lui-même le double-clic : le label
+      // sert de zone active tout en conservant la vraie sémantique disabled.
+      if (!input.disabled || (input.name === 'remoteHost' && form.elements.type.value === '-D')) return;
+      event.preventDefault(); input.disabled = false; input.value = '0.0.0.0'; input.dataset.explicitAddress = input.value; input.focus(); input.select();
+    });
+  }
+  form.elements.type.addEventListener('change', updateType); updateType();
   submit(form, async () => {
     const v = formData(form), reverse = v.type === '-R';
-    const body = { type: v.type, name: v.name, listen_host: reverse ? v.remoteHost : v.localHost, listen_port: Number(reverse ? v.remotePort : v.localPort) };
-    if (v.type !== '-D') Object.assign(body, { endpoint_host: reverse ? v.localHost : v.remoteHost, endpoint_port: Number(reverse ? v.localPort : v.remotePort) });
+    const listenInput = reverse ? form.elements.remoteHost : form.elements.localHost;
+    const endpointInput = reverse ? form.elements.localHost : form.elements.remoteHost;
+    const body = { type: v.type, name: v.name, listen_host: listenInput.value === '*' ? '' : listenInput.value, listen_port: Number(reverse ? v.remotePort : v.localPort) };
+    if (v.type !== '-D') Object.assign(body, { endpoint_host: endpointInput.value, endpoint_port: Number(reverse ? v.localPort : v.remotePort) });
     await save(body); dialog.close();
   });
 }

@@ -11,9 +11,12 @@ import { z } from 'zod';
 export const id = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,47}$/);
 const port = z.number().int().min(1).max(65535);
 const host = z.string().min(1).max(253).regex(/^[a-zA-Z0-9_.:%-]+$/);
+// Une adresse d'écoute vide demande à SSH/Node d'écouter sur toutes les
+// interfaces. Les destinations restent obligatoirement des hôtes explicites.
+const listenHost = z.union([z.literal(''), host]);
 // Les débits sont exprimés en Ko/s décimaux : 1 Ko = 1 000 octets. Zéro = illimité.
 export const bandwidth = z.object({ up: z.number().min(0).max(10000000), down: z.number().min(0).max(10000000) }).strict();
-const channel = z.object({ name: z.string().min(1).max(100), listen_port: port, listen_host: host.default('127.0.0.1'), endpoint_host: host.optional(), endpoint_port: port.optional() }).strict();
+const channel = z.object({ name: z.string().min(1).max(100), listen_port: port, listen_host: listenHost.default('127.0.0.1'), endpoint_host: host.optional(), endpoint_port: port.optional() }).strict();
 export const channelInput = channel.extend({ type: z.enum(['-L', '-R', '-D']) }).superRefine((c, ctx) => {
   // Un proxy SOCKS (-D) choisit sa destination à chaque connexion cliente.
   if (c.type !== '-D' && (!c.endpoint_host || !c.endpoint_port)) ctx.addIssue({ code: 'custom', message: 'Endpoint required for -L and -R' });
