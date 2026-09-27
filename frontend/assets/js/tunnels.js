@@ -5,12 +5,23 @@ const paths = {
   start: '<path d="m8 5 11 7-11 7Z"/>', stop: '<rect x="6" y="6" width="12" height="12" rx="1"/>',
   restart: '<path d="M20 7v5h-5M19 12a7 7 0 1 0-2 5M20 7l-3 3"/>',
   add: '<path d="M12 5v14M5 12h14"/>', menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
-  check: '<path d="m5 12 4 4L19 6"/>'
+  check: '<path d="m5 12 4 4L19 6"/>',
+  settings: '<path d="m9 3-.5 3-2 1-2.5-1-2 3 2 2v2l-2 2 2 3 2.5-1 2 1 .5 3h6l.5-3 2-1 2.5 1 2-3-2-2v-2l2-2-2-3-2.5 1-2-1L15 3Z"/><circle cx="12" cy="12" r="3"/>',
+  lock: '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/>'
 };
 export const icon = name => `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]}</svg>`;
 const button = (name, label, attr, disabled = false) => `<button class="icon-button" title="${label}" aria-label="${label}" ${attr} ${disabled ? 'disabled' : ''}>${icon(name)}</button>`;
 const rate = value => value ? `${value.toLocaleString('fr-FR')} Ko/s` : 'Illimité';
 const labels = { stopped: 'Arrêté', running: 'Actif', starting: 'Démarrage', stopping: 'Arrêt', reconnecting: 'Reconnexion', error: 'Erreur' };
+
+// Partager le filtre garantit que les commandes groupées visent exactement les
+// mêmes tunnels que la liste, y compris lorsqu'un nom de channel correspond.
+export function filterTunnels(tunnels, query) {
+  const term = query.trim().toLocaleLowerCase('fr');
+  return tunnels.filter(t => [t.id, `${t.config.user}@${t.config.ip}:${t.config.ssh_port}`,
+    ...Object.values(t.config.tunnels).flatMap(group => Object.values(group).map(c => c.name))
+  ].some(value => String(value).toLocaleLowerCase('fr').includes(term)));
+}
 
 export function cardHtml(tunnel, open, checks = {}) {
   const c = tunnel.config;
@@ -18,9 +29,7 @@ export function cardHtml(tunnel, open, checks = {}) {
     <div class="tunnel-heading">
       <button class="tunnel-expand" aria-expanded="${open}" aria-label="${open ? 'Replier' : 'Déplier'} ${esc(tunnel.id)}" data-expand>
         <span class="status status--${esc(tunnel.status)}"><span></span>${esc(labels[tunnel.status] || tunnel.status)}</span>
-        <span class="tunnel-title"><strong>${esc(tunnel.id)} <small class="limits">↙ ${rate(c.bandwidth.down)} · ↗ ${rate(c.bandwidth.up)}</small></strong><span>${esc(c.user)}@${esc(c.ip)}:${c.ssh_port}</span></span>
-        <span class="live-rates">↙ <b data-down>${Number(tunnel.metrics?.downKoPerSecond || 0).toFixed(1)}</b> · ↗ <b data-up>${Number(tunnel.metrics?.upKoPerSecond || 0).toFixed(1)}</b> Ko/s</span>
-        <span class="chevron">${open ? '⌃' : '⌄'}</span>
+        <span class="tunnel-title"><strong>${esc(tunnel.id)} <small class="limits">↙ ${rate(c.bandwidth.down)} · ↗ ${rate(c.bandwidth.up)}</small></strong></span>
       </button>
       <div class="compact-actions">
         ${tunnel.level >= 2 ? button('start', 'Démarrer', 'data-action="start"', tunnel.desired === 'running') + button('stop', 'Arrêter', 'data-action="stop"', tunnel.desired === 'stopped') + button('restart', 'Redémarrer', 'data-action="restart"') : ''}
@@ -31,6 +40,7 @@ export function cardHtml(tunnel, open, checks = {}) {
     <div class="tunnel-body" ${open ? '' : 'hidden'}>
       ${tunnel.error ? `<p class="error-box">${esc(tunnel.error)}</p>` : ''}
       <div class="channels">${channelsHtml(c.tunnels, checks)}</div>
+      <footer class="tunnel-footer"><code>${esc(c.user)}@${esc(c.ip)}:${c.ssh_port}</code><span class="live-rates">↙ <b data-down>${Number(tunnel.metrics?.downKoPerSecond || 0).toFixed(1)}</b> · ↗ <b data-up>${Number(tunnel.metrics?.upKoPerSecond || 0).toFixed(1)}</b> Ko/s</span></footer>
     </div>
   </article>`;
 }
@@ -43,7 +53,7 @@ export function channelsHtml(groups, checks = {}) {
     const remote = type === '-R' ? `${c.listen_host}:${c.listen_port}` : type === '-D' ? 'Destination SOCKS dynamique' : `${c.endpoint_host}:${c.endpoint_port}`;
     const badge = (kind, label) => `<span class="probe probe--${kind} ${check[kind] === true ? 'probe--ok' : ''}" title="${label} : ${check[kind] == null ? 'non disponible' : check[kind] ? 'réussi' : 'échoué'}" aria-label="${label} : ${check[kind] == null ? 'non disponible' : check[kind] ? 'réussi' : 'échoué'}">${icon('check')}</span>`;
     const arrow = type === '-R' ? '←' : type === '-D' ? '⇢' : '→';
-    return `<div class="channel-flow" data-channel-type="${type}" data-channel-port="${port}" data-channel-name="${esc(c.name)}"><strong>${esc(c.name)}</strong><code>${esc(local)}</code><span class="flow-arrow" title="${type}" aria-label="Redirection ${type}">${arrow}</span><code>${esc(remote)}</code><span class="probe-pair">${badge('tcp', 'TCP : écoute et destination par le tunnel')}${badge('icmp', 'ICMP direct depuis le backend')}</span></div>`;
+    return `<div class="channel-flow" data-channel-type="${type}" data-channel-port="${port}" data-channel-name="${esc(c.name)}"><strong>${esc(c.name)}</strong><span class="channel-route"><code class="channel-local">${esc(local)}</code><span class="flow-arrow" title="${type}" aria-label="Redirection ${type}">${arrow}</span><code class="channel-remote">${esc(remote)}</code></span><span class="probe-pair">${badge('tcp', 'TCP : écoute et destination par le tunnel')}${badge('icmp', 'ICMP direct depuis le backend')}</span></div>`;
   })).join('') || '<p class="muted">Aucun channel. Utilisez + pour en ajouter un.</p>';
 }
 

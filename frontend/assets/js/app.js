@@ -1,5 +1,5 @@
 import { Api } from './api.js';
-import { cardHtml, channelsHtml, bandwidthDialog, channelDialog, channelContextMenu } from './tunnels.js';
+import { cardHtml, channelsHtml, bandwidthDialog, channelDialog, channelContextMenu, icon, filterTunnels } from './tunnels.js';
 import { appRoot, escapeHtml, formData, identifierPattern, openDialog, plural, qs, qsa, toast } from './ui.js';
 
 // L'état reste volontairement petit et sérialisable. Les vues lisent ce même objet,
@@ -7,6 +7,7 @@ import { appRoot, escapeHtml, formData, identifierPattern, openDialog, plural, q
 const state = { me: null, tunnels: [], filter: '', stream: null, page: 'tunnels', openTunnels: new Set(), checks: {}, pendingChecks: new Set() };
 const levels = ['Aucun', 'Lecture', 'Exécution', 'Écriture', 'Gestion'];
 const api = new Api(() => showLogin('Votre session a expiré.'));
+let bulkPending = false;
 
 const channelCount = tunnel => Object.values(tunnel.config.tunnels).reduce((sum, group) => sum + Object.keys(group).length, 0);
 const statusLabel = status => ({ stopped: 'Arrêté', starting: 'Démarrage', running: 'Actif', stopping: 'Arrêt', reconnecting: 'Reconnexion', error: 'Erreur' })[status] || status;
@@ -45,7 +46,7 @@ function showLogin(message = '') {
 }
 
 async function showDashboard() {
-  appRoot().innerHTML = `<div class="shell"><header class="topbar"><button class="brand brand--button" data-home><span class="brand__mark">⇄</span><span>OSTM</span></button><div class="topbar__actions"><span class="user-chip">${escapeHtml(state.me.username)}${state.me.root ? ' · root' : ''}</span><button class="button button--ghost" data-settings>Paramètres</button><button class="button" data-logout>Déconnexion</button></div></header><main id="content" class="content"></main></div>`;
+  appRoot().innerHTML = `<div class="shell"><header class="topbar"><button class="brand brand--button" data-home><span class="brand__mark">⇄</span><span>OSTM</span></button><div class="topbar__actions"><span class="user-chip">${escapeHtml(state.me.username)}${state.me.root ? ' · root' : ''}</span><button class="icon-button" data-settings title="Paramètres" aria-label="Paramètres">${icon('settings')}</button><button class="icon-button" data-logout title="Déconnexion" aria-label="Déconnexion">${icon('lock')}</button></div></header><main id="content" class="content"></main></div>`;
   qs('[data-home]').addEventListener('click', () => { state.page = 'tunnels'; renderTunnelPage(); startStream(); });
   qs('[data-settings]').addEventListener('click', () => { state.page = 'settings'; renderSettings(); });
   qs('[data-logout]').addEventListener('click', async () => { try { await api.request('/auth/logout', { method: 'POST' }); } finally { api.setToken(''); showLogin(); } });
@@ -55,13 +56,15 @@ async function showDashboard() {
 function renderTunnelPage() {
   // Le filtre est monté une fois : SSE ne doit jamais remplacer un input actif.
   if (!qs('#filter')) {
-    qs('#content').innerHTML = '<section class="page-head"><div><p class="eyebrow">Vue d’ensemble</p><h1>Tunnels</h1></div><button class="button button--primary" data-create-tunnel>+ Nouveau tunnel</button></section><div class="toolbar"><label class="search"><span>⌕</span><input id="filter" type="search" placeholder="Filtrer par nom, hôte ou état…"></label></div><section id="tunnel-list" class="tunnel-list"></section>';
+    qs('#content').innerHTML = `<div class="toolbar"><label class="search"><span>⌕</span><input id="filter" type="search" aria-label="Filtrer les tunnels" placeholder="Tunnel, channel ou user@serveur:port…"></label><div class="bulk-actions" role="group" aria-label="Actions sur les tunnels filtrés">${['start', 'stop', 'restart'].map(action => `<button class="icon-button" data-bulk-action="${action}" title="${action} · tunnels filtrés" aria-label="${action} · tunnels filtrés">${icon(action)}</button>`).join('')}</div><button class="button button--primary" data-create-tunnel>+ Ajouter un tunnel</button></div><section id="tunnel-list" class="tunnel-list"></section>`;
     qs('#filter').value = state.filter;
     qs('#filter').addEventListener('input', event => { state.filter = event.target.value; renderTunnelPage(); });
     qs('[data-create-tunnel]').addEventListener('click', showCreateTunnel);
+    qsa('[data-bulk-action]').forEach(button => button.addEventListener('click', () => runBulkAction(button.dataset.bulkAction)));
   }
   qs('[data-create-tunnel]').hidden = !(state.me.root || state.tunnels.some(t => t.level >= 4));
-  const visible = state.tunnels.filter(t => [t.id, t.config.ip, t.status].join(' ').toLocaleLowerCase('fr').includes(state.filter.toLocaleLowerCase('fr')));
+  const visible = filterTunnels(state.tunnels, state.filter);
+  qsa('[data-bulk-action]').forEach(button => { button.disabled = bulkPending || !visible.some(t => t.level >= 2); });
   const list = qs('#tunnel-list');
   for (const card of qsa('.tunnel-card', list)) if (!visible.some(t => t.id === card.dataset.id)) card.remove();
   qs('.empty', list)?.remove();
@@ -90,7 +93,6 @@ function bindCard(card, tunnel) {
     qs('[data-expand]', card).setAttribute('aria-expanded', String(open));
     qs('[data-expand]', card).setAttribute('aria-label', `${open ? 'Replier' : 'Déplier'} ${tunnel.id}`);
     qs('.tunnel-body', card).hidden = !open;
-    qs('.chevron', card).textContent = open ? '⌃' : '⌄';
     if (open) checkTunnel(tunnel);
   });
   qsa('[data-action]', card).forEach(button => button.addEventListener('click', () => runAction(tunnel, button.dataset.action)));
@@ -129,6 +131,29 @@ async function checkTunnel(tunnel) {
 }
 
 async function runAction(tunnel, action) { try { await api.request(`/tunnels/${encodeURIComponent(tunnel.id)}/${action}`, { method: 'POST' }); toast(`${tunnel.id} : commande envoyée.`, 'success'); await refreshTunnels(); renderTunnelPage(); } catch (e) { toast(e.message, 'error'); } }
+
+async function runBulkAction(action) {
+  if (bulkPending) return;
+  // Figer les cibles au clic : modifier le filtre ou recevoir un événement SSE
+  // pendant l'envoi ne doit jamais ajouter de nouveaux tunnels à l'opération.
+  const visible = filterTunnels(state.tunnels, state.filter);
+  const targets = visible.filter(t => t.level >= 2);
+  if (!targets.length) return;
+  bulkPending = true; renderTunnelPage();
+  let succeeded = 0; const failed = [];
+  try {
+    // Les requêtes successives évitent une rafale de connexions sur le Pi.
+    for (const tunnel of targets) {
+      try { await api.request(`/tunnels/${encodeURIComponent(tunnel.id)}/${action}`, { method: 'POST' }); succeeded++; }
+      catch (error) { failed.push(`${tunnel.id} : ${error.message}`); if (error.status === 401) break; }
+    }
+    const skipped = visible.length - targets.length;
+    toast(`${succeeded}/${targets.length} commandes envoyées.${skipped ? ` ${skipped} tunnel(s) sans droit d’exécution ignoré(s).` : ''}`, failed.length ? 'error' : 'success');
+    if (failed.length) toast(failed.join(' · '), 'error');
+    if (state.me) await refreshTunnels();
+  } catch (error) { toast(error.message, 'error'); }
+  finally { bulkPending = false; if (state.me && state.page === 'tunnels') renderTunnelPage(); }
+}
 
 function showBandwidth(tunnel) {
   bandwidthDialog(tunnel, async body => {

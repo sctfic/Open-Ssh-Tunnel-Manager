@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sliderRate, rateSlider, channelsHtml, cardHtml } from '../frontend/assets/js/tunnels.js';
+import { sliderRate, rateSlider, channelsHtml, cardHtml, filterTunnels } from '../frontend/assets/js/tunnels.js';
 import { identifierPattern } from '../frontend/assets/js/ui.js';
 
 // Tester les transformations métier sans simuler un navigateur entier : les
@@ -30,4 +30,15 @@ test('identifier pattern is valid in modern browsers and matches backend identif
   const pattern = new RegExp(`^(?:${identifierPattern})$`, 'v');
   for (const value of ['user', 'user_name', 'user-name', 'A1']) assert.equal(pattern.test(value), true, value);
   for (const value of ['', '_user', '-user', 'user name', 'équipe']) assert.equal(pattern.test(value), false, value);
+});
+
+test('filter selects tunnels by name, channel name and complete SSH URI', () => {
+  const tunnels = [
+    { id: 'Maison', config: { user: 'root', ip: 'router.lan', ssh_port: 22, tunnels: { '-L': { 80: { name: 'Caméra' } } } } },
+    { id: 'Bureau', config: { user: 'alban', ip: 'office.lan', ssh_port: 2222, tunnels: { '-R': { 443: { name: 'HTTPS' } } } } }
+  ];
+  for (const term of ['maison', 'CAMÉRA', 'root@router.lan:22']) assert.deepEqual(filterTunnels(tunnels, term), [tunnels[0]]);
+  assert.deepEqual(filterTunnels(tunnels, 'alban@office.lan:2222'), [tunnels[1]]);
+  assert.deepEqual(filterTunnels(tunnels, 'missing'), []);
+  assert.deepEqual(filterTunnels(tunnels, '  '), tunnels);
 });
