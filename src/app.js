@@ -8,7 +8,7 @@ import { Manager } from './manager.js';
 import { LinuxTransport, DirectTransport } from './network/transport.js';
 import { tunnel, id, userInput, password, bandwidth, channelInput, requireThat } from './schema.js';
 import { provision, onboard, OnboardingError } from './ssh.js';
-import { diagnose } from './diagnostics.js';
+import { diagnose, localPortAvailable } from './diagnostics.js';
 
 /**
  * Construit l'application sans ouvrir de port TCP. Cette séparation permet aux
@@ -181,15 +181,26 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
     await store.saveUsers(users); await audit(request, 'rights.updated', { tunnel: key, username: name, level: body.level }); return { username: name, level: body.level };
   }));
   for (const action of ['start', 'stop', 'restart']) {
-    // Les routes unitaires et globales partagent le même contrôle de niveau 2.
-    // Une action globale ignore les tunnels non autorisés au lieu de les révéler.
+    // Les routes unitaires et groupées partagent le même contrôle de niveau 2.
     app.post(`/api/v2/tunnels/:id/${action}`, mutate(async request => { const key = await access(request, 2); await audit(request, `tunnel.${action}`, key); return manager[action](key); }));
-    app.post(`/api/v2/actions/${action}`, mutate(async request => {
-      const results = [];
-      for (const key of Object.keys(await store.configs())) if (level(request.user, key) >= 2) {
-        try { results.push({ id: key, success: true, ...await manager[action](key) }); } catch (e) { results.push({ id: key, success: false, error: e.message }); }
+    app.post(`/api/v2/tunnels/${action}`, mutate(async request => {
+      const body = z.object({ ids: z.array(id).min(1).max(254) }).strict()
+        .refine(value => new Set(value.ids).size === value.ids.length, { message: 'Duplicate tunnel identifiers', path: ['ids'] }).parse(request.body);
+      const configs = await store.configs();
+      // Valider toute la sélection avant la première action évite un traitement
+      // partiel causé par un identifiant absent ou un droit insuffisant.
+      for (const key of body.ids) {
+        requireThat(Object.hasOwn(configs, key), 404, `Tunnel not found: ${key}`);
+        requireThat(level(request.user, key) >= 2, 403, `Execute permission required: ${key}`);
       }
-      await audit(request, `tunnels.${action}`, results.map(x => x.id)); return results;
+      // Un seul appel HTTP transporte toute la sélection. Les actions restent
+      // ordonnées côté serveur afin de sérialiser proprement desired.json.
+      const results = [];
+      for (const key of body.ids) {
+        try { results.push({ id: key, success: true, ...await manager[action](key) }); }
+        catch (error) { results.push({ id: key, success: false, error: error.message }); }
+      }
+      await audit(request, `tunnels.${action}`, body.ids); return results;
     }));
   }
   app.put('/api/v2/tunnels/:id/bandwidth', mutate(async request => {
@@ -204,7 +215,15 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
   app.post('/api/v2/tunnels/:id/channels', mutate(async (request, reply) => {
     const key = await access(request, 3); const { type, ...channel } = channelInput.parse(request.body); const config = await store.get(key);
     const restart = manager.status(key).desired === 'running';
-    requireThat(!config.tunnels[type][channel.listen_port], 409, 'Channel already exists'); config.tunnels[type][channel.listen_port] = channel;
+    requireThat(!config.tunnels[type][channel.listen_port], 409, 'Channel already exists');
+    if (type === '-L' || type === '-D') {
+      const probe = await localPortAvailable(channel.listen_host, channel.listen_port);
+      const address = `${channel.listen_host}:${channel.listen_port}`;
+      requireThat(probe.available, 409, probe.error === 'EADDRINUSE'
+        ? `Le port d’écoute local ${address} est déjà utilisé. Choisissez une autre IP ou un autre port.`
+        : `Impossible d’ouvrir le port d’écoute local ${address} (${probe.error}). Vérifiez l’adresse locale.`);
+    }
+    config.tunnels[type][channel.listen_port] = channel;
     await store.put(key, tunnel.parse(config));
     if (restart) await manager.restart(key);
     await audit(request, 'channel.created', { tunnel: key, type, port: channel.listen_port, restarted: restart });
@@ -235,9 +254,9 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
   app.post('/api/v2/tunnels/:id/diagnostics', async request => {
     const key = await access(request, 1);
     if (!diagnostics.has(key)) {
-      const config = await store.get(key);
-      const session = manager.status(key).status === 'running' ? manager.state(key).session : null;
-      diagnostics.set(key, diagnose(config, session).finally(() => diagnostics.delete(key)));
+      // Enregistrer la promesse avant le premier await partage aussi la lecture
+      // de configuration entre deux demandes arrivant au même instant.
+      diagnostics.set(key, store.get(key).then(config => diagnose(config)).finally(() => diagnostics.delete(key)));
     }
     const channels = await diagnostics.get(key);
     request.user = await auth.authenticate(request.headers.authorization);

@@ -11,10 +11,11 @@ test('bandwidth sliders cover four logarithmic decades', () => {
   assert.equal(rateSlider(0), 1001); assert.equal(sliderRate(1001), 0);
 });
 test('reverse channels show the local destination before the remote listener', () => {
-  const html = channelsHtml({ '-R': { 8000: { name: '<test>', listen_host: 'remote', listen_port: 8000, endpoint_host: 'local', endpoint_port: 80 } } }, { '-R:8000': { tcp: true, icmp: false } });
+  const html = channelsHtml({ '-R': { 8000: { name: '<test>', listen_host: 'remote', listen_port: 8000, endpoint_host: 'local', endpoint_port: 80 } } }, { '-R:8000': { tcp: 12.4, tcpError: null, icmp: null, icmpError: 'timeout' } });
   assert.ok(html.indexOf('local:80') < html.indexOf('remote:8000'));
   assert.match(html, /←/); assert.match(html, /&lt;test&gt;/); assert.doesNotMatch(html, /<small>-R/);
   assert.match(html, /probe--tcp probe--ok/); assert.doesNotMatch(html, /probe--icmp probe--ok/);
+  assert.match(html, /12\.4 ms/); assert.match(html, /délai dépassé \(600 ms\)/);
 });
 test('collapsed cards expose execution and management controls according to rights', () => {
   const tunnel = { id: 'alpha', level: 4, status: 'reconnecting', desired: 'running', config: { bandwidth: { up: 100, down: 1000 }, tunnels: {} } };

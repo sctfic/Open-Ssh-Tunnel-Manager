@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import net from 'node:net';
 import { buildApp } from '../src/app.js';
 import { hashPassword } from '../src/auth.js';
 
@@ -12,6 +13,11 @@ import { hashPassword } from '../src/auth.js';
  */
 const config = () => ({ ip: '127.0.0.1', user: 'tester', ssh_port: 22, ssh_key: '', hostFingerprint: `SHA256:${'A'.repeat(43)}`, bandwidth: { up: 0, down: 0 }, tunnels: { '-L': {}, '-R': {}, '-D': {} } });
 const secret = 'test-password-long-enough';
+async function unusedPort() {
+  const listener = net.createServer();
+  await new Promise((resolve, reject) => { listener.once('error', reject); listener.listen(0, '127.0.0.1', resolve); });
+  const port = listener.address().port; await new Promise(resolve => listener.close(resolve)); return port;
+}
 class FakeManager {
   // Même interface publique que Manager, sans ouvrir de socket ni de processus.
   constructor() { this.states = new Map(); this.calls = []; }
@@ -69,7 +75,12 @@ test('permission ladder controls actions, editing, management and visibility', a
   assert.equal((await call('writer', 'PUT', '/tunnels/alpha/rights/reader', { level: 4 })).statusCode, 403);
   assert.equal((await call('manager', 'PUT', '/tunnels/hidden/rights/reader', { level: 4 })).statusCode, 403);
   assert.equal((await call('manager', 'PUT', '/tunnels/alpha/rights/reader', { level: 4 })).statusCode, 200);
-  manager.calls = []; await call('executor', 'POST', '/actions/start'); assert.deepEqual(manager.calls, [['start', 'alpha']]);
+  manager.calls = [];
+  const bulk = await call('executor', 'POST', '/tunnels/start', { ids: ['alpha'] });
+  assert.equal(bulk.statusCode, 200); assert.deepEqual(manager.calls, [['start', 'alpha']]);
+  assert.equal((await call('executor', 'POST', '/tunnels/start', { ids: ['alpha', 'hidden'] })).statusCode, 403);
+  assert.equal((await call('executor', 'POST', '/tunnels/start', { ids: ['missing'] })).statusCode, 404);
+  assert.equal((await call('executor', 'POST', '/tunnels/start', { ids: ['alpha', 'alpha'] })).statusCode, 400);
 });
 test('root is immutable and rights revocation applies to an existing session', async t => {
   const { call } = await fixture(t);
@@ -124,16 +135,30 @@ test('validation rejects traversal, arbitrary key paths, unknown configuration a
   await call('writer', 'POST', '/tunnels/alpha/start');
   assert.equal((await call('writer', 'PUT', '/tunnels/alpha', config())).statusCode, 409);
 });
+
+test('channel creation reports an occupied local listening port', async t => {
+  const { call } = await fixture(t);
+  const listener = net.createServer();
+  await new Promise((resolve, reject) => { listener.once('error', reject); listener.listen(0, '127.0.0.1', resolve); });
+  t.after(() => new Promise(resolve => listener.close(resolve)));
+  const response = await call('writer', 'POST', '/tunnels/alpha/channels', {
+    type: '-L', name: 'occupied', listen_host: '127.0.0.1', listen_port: listener.address().port,
+    endpoint_host: '127.0.0.1', endpoint_port: 80
+  });
+  assert.equal(response.statusCode, 409);
+  assert.match(response.json().error, /port d’écoute local .* déjà utilisé/);
+});
 test('channel changes restart an active tunnel while rename remains live', async t => {
   const { call, manager } = await fixture(t);
   await call('writer', 'POST', '/tunnels/alpha/start'); manager.calls = [];
-  const channel = { type: '-L', name: 'web', listen_host: '127.0.0.1', listen_port: 8080, endpoint_host: '10.0.0.2', endpoint_port: 80 };
+  const port = await unusedPort();
+  const channel = { type: '-L', name: 'web', listen_host: '127.0.0.1', listen_port: port, endpoint_host: '10.0.0.2', endpoint_port: 80 };
   const added = await call('writer', 'POST', '/tunnels/alpha/channels', channel);
   assert.equal(added.statusCode, 201); assert.equal(added.json().restarted, true); assert.deepEqual(manager.calls, [['restart', 'alpha']]);
   manager.calls = [];
-  const renamed = await call('writer', 'PATCH', '/tunnels/alpha/channels/-L/8080', { name: 'intranet' });
+  const renamed = await call('writer', 'PATCH', `/tunnels/alpha/channels/-L/${port}`, { name: 'intranet' });
   assert.equal(renamed.statusCode, 200); assert.equal(renamed.json().name, 'intranet'); assert.deepEqual(manager.calls, []);
-  const deleted = await call('writer', 'DELETE', '/tunnels/alpha/channels/-L/8080');
+  const deleted = await call('writer', 'DELETE', `/tunnels/alpha/channels/-L/${port}`);
   assert.equal(deleted.statusCode, 200); assert.equal(deleted.json().restarted, true); assert.deepEqual(manager.calls, [['restart', 'alpha']]);
 });
 test('logout invalidates the token and password hashes never appear in user lists', async t => {
@@ -149,10 +174,22 @@ test('live SSE filters tunnels, applies revocation and closes after logout', { t
   const controller = new AbortController();
   const response = await fetch(`${address}/api/v2/events`, { headers: { authorization: `Bearer ${tokens.reader}` }, signal: controller.signal });
   assert.equal(response.status, 200); const stream = response.body.getReader();
+  const decoder = new TextDecoder();
+  const readUntil = async pattern => {
+    // TCP peut livrer un ancien événement déjà en attente ou fractionner le
+    // suivant. Lire jusqu'au contenu attendu teste le flux, pas son découpage.
+    let received = '';
+    while (!pattern.test(received)) {
+      const { value, done } = await stream.read(); if (done) break;
+      received += decoder.decode(value, { stream: true });
+    }
+    return received;
+  };
   try {
-    const first = new TextDecoder().decode((await stream.read()).value); assert.match(first, /"id":"alpha"/); assert.doesNotMatch(first, /"id":"hidden"/);
+    const first = await readUntil(/"id":"alpha"/); assert.doesNotMatch(first, /"id":"hidden"/);
     await call('manager', 'PUT', '/tunnels/alpha/rights/reader', { level: 0 });
-    const next = new TextDecoder().decode((await stream.read()).value); assert.match(next, /data: \[\]/);
-    await call('reader', 'POST', '/auth/logout'); assert.equal((await stream.read()).done, true);
+    assert.match(await readUntil(/data: \[\]/), /data: \[\]/);
+    await call('reader', 'POST', '/auth/logout');
+    let done = false; while (!done) ({ done } = await stream.read()); assert.equal(done, true);
   } finally { controller.abort(); await stream.cancel().catch(() => {}); }
 });

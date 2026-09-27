@@ -8,6 +8,16 @@ const state = { me: null, tunnels: [], filter: '', stream: null, page: 'tunnels'
 const levels = ['Aucun', 'Lecture', 'Exécution', 'Écriture', 'Gestion'];
 const api = new Api(() => showLogin('Votre session a expiré.'));
 let bulkPending = false;
+let diagnosticsTimer = null;
+
+function checkExpandedTunnels() {
+  if (!state.me || state.page !== 'tunnels') return;
+  // Les demandes partent ensemble ; pendingChecks évite le chevauchement de
+  // deux cycles et le backend borne globalement le nombre de sondes actives.
+  for (const tunnel of state.tunnels) {
+    if (state.openTunnels.has(tunnel.id)) void checkTunnel(tunnel);
+  }
+}
 
 const channelCount = tunnel => Object.values(tunnel.config.tunnels).reduce((sum, group) => sum + Object.keys(group).length, 0);
 const statusLabel = status => ({ stopped: 'Arrêté', starting: 'Démarrage', running: 'Actif', stopping: 'Arrêt', reconnecting: 'Reconnexion', error: 'Erreur' })[status] || status;
@@ -50,7 +60,12 @@ async function showDashboard() {
   qs('[data-home]').addEventListener('click', () => { state.page = 'tunnels'; renderTunnelPage(); startStream(); });
   qs('[data-settings]').addEventListener('click', () => { state.page = 'settings'; renderSettings(); });
   qs('[data-logout]').addEventListener('click', async () => { try { await api.request('/auth/logout', { method: 'POST' }); } finally { api.setToken(''); showLogin(); } });
-  await refreshTunnels(); startStream(); renderTunnelPage();
+  await refreshTunnels(); renderTunnelPage();
+  // Précharger les diagnostics de toute la liste autorisée, même repliée ou
+  // masquée par le filtre. Ne pas attendre les sondes pour afficher la page.
+  // Les résultats restent dans state.checks et sont visibles dès le dépliage.
+  for (const tunnel of state.tunnels) void checkTunnel(tunnel);
+  startStream();
 }
 
 function renderTunnelPage() {
@@ -97,6 +112,7 @@ function bindCard(card, tunnel) {
   });
   qsa('[data-action]', card).forEach(button => button.addEventListener('click', () => runAction(tunnel, button.dataset.action)));
   qs('[data-menu]', card)?.addEventListener('click', event => {
+    qsa('.menu-items').forEach(other => { if (!card.contains(other)) other.hidden = true; });
     const menu = qs('.menu-items', card); menu.hidden = !menu.hidden;
     event.currentTarget.setAttribute('aria-expanded', String(!menu.hidden));
   });
@@ -106,6 +122,8 @@ function bindCard(card, tunnel) {
   qs('[data-add-channel]', card)?.addEventListener('click', () => channelDialog(tunnel, async body => {
     await api.request('/tunnels/' + encodeURIComponent(tunnel.id) + '/channels', { method: 'POST', body });
     delete state.checks[tunnel.id]; await refreshTunnels(); renderTunnelPage();
+    const updated = state.tunnels.find(item => item.id === tunnel.id);
+    if (updated) void checkTunnel(updated);
   }));
   card.addEventListener('contextmenu', event => {
     const row = event.target.closest('.channel-flow'); if (!row || tunnel.level < 3) return;
@@ -119,13 +137,17 @@ function bindCard(card, tunnel) {
 
 async function checkTunnel(tunnel) {
   if (state.pendingChecks.has(tunnel.id)) return;
-  state.pendingChecks.add(tunnel.id); state.checks[tunnel.id] = {};
+  state.pendingChecks.add(tunnel.id);
+  const viewer = state.me;
   const update = () => {
     const card = qsa('.tunnel-card').find(node => node.dataset.id === tunnel.id);
     if (card) qs('.channels', card).innerHTML = channelsHtml(tunnel.config.tunnels, state.checks[tunnel.id]);
   };
   update();
-  try { state.checks[tunnel.id] = (await api.request('/tunnels/' + encodeURIComponent(tunnel.id) + '/diagnostics', { method: 'POST' })).channels; }
+  try {
+    const result = await api.request('/tunnels/' + encodeURIComponent(tunnel.id) + '/diagnostics', { method: 'POST' });
+    if (state.me === viewer) state.checks[tunnel.id] = result.channels;
+  }
   catch (error) { toast(error.message, 'error'); }
   finally { state.pendingChecks.delete(tunnel.id); update(); }
 }
@@ -140,13 +162,12 @@ async function runBulkAction(action) {
   const targets = visible.filter(t => t.level >= 2);
   if (!targets.length) return;
   bulkPending = true; renderTunnelPage();
-  let succeeded = 0; const failed = [];
   try {
-    // Les requêtes successives évitent une rafale de connexions sur le Pi.
-    for (const tunnel of targets) {
-      try { await api.request(`/tunnels/${encodeURIComponent(tunnel.id)}/${action}`, { method: 'POST' }); succeeded++; }
-      catch (error) { failed.push(`${tunnel.id} : ${error.message}`); if (error.status === 401) break; }
-    }
+    // Toute la sélection part dans un seul appel HTTP ; le backend conserve
+    // l'ordre et renvoie un résultat individuel pour chaque tunnel.
+    const results = await api.request(`/tunnels/${action}`, { method: 'POST', body: { ids: targets.map(t => t.id) } });
+    const succeeded = results.filter(result => result.success).length;
+    const failed = results.filter(result => !result.success).map(result => `${result.id} : ${result.error}`);
     const skipped = visible.length - targets.length;
     toast(`${succeeded}/${targets.length} commandes envoyées.${skipped ? ` ${skipped} tunnel(s) sans droit d’exécution ignoré(s).` : ''}`, failed.length ? 'error' : 'success');
     if (failed.length) toast(failed.join(' · '), 'error');
@@ -238,10 +259,19 @@ async function removeUser(name) { if (!confirm(`Supprimer le compte « ${name} �
 function showPasswordDialog() { const wrap = document.createElement('div'); wrap.innerHTML = `<form class="stack"><label>Mot de passe actuel<input name="currentPassword" type="password"></label><label>Nouveau mot de passe<input name="password" type="password"></label><button class="button button--primary" type="submit">Modifier</button><p class="form-error"></p></form>`; const dialog = openDialog('Changer le mot de passe', wrap); const form = qs('form', wrap); form.addEventListener('submit', async e => { e.preventDefault(); await withSubmit(form, async () => { await api.request('/auth/password', { method: 'PUT', body: formData(form) }); dialog.close(); api.setToken(''); showLogin('Mot de passe modifié. Reconnectez-vous.'); }, qs('.form-error', form)); }); }
 
 async function refreshTunnels() { state.tunnels = await api.request('/tunnels'); }
-function startStream() { stopStream(); const controller = new AbortController(); state.stream = controller; const connect = async () => { try { await api.streamTunnels(data => { state.tunnels = data; if (state.page === 'tunnels') renderTunnelPage(); }, controller.signal); if (!controller.signal.aborted) setTimeout(connect, 1500); } catch (e) { if (!controller.signal.aborted) setTimeout(connect, 2500); } }; connect(); }
-function stopStream() { state.stream?.abort(); state.stream = null; }
+function startStream() { stopStream(); checkExpandedTunnels(); diagnosticsTimer = setInterval(checkExpandedTunnels, 30000); const controller = new AbortController(); state.stream = controller; const connect = async () => { try { await api.streamTunnels(data => { state.tunnels = data; if (state.page === 'tunnels') renderTunnelPage(); }, controller.signal); if (!controller.signal.aborted) setTimeout(connect, 1500); } catch (e) { if (!controller.signal.aborted) setTimeout(connect, 2500); } }; connect(); }
+function stopStream() { clearInterval(diagnosticsTimer); diagnosticsTimer = null; state.stream?.abort(); state.stream = null; }
 async function withSubmit(form, task, errorNode) { const button = qs('[type="submit"], button:not([type])', form); errorNode.textContent = ''; if (button) button.disabled = true; try { await task(); } catch (e) { errorNode.textContent = e instanceof SyntaxError ? 'Le JSON est invalide.' : e.message; } finally { if (button) button.disabled = false; } }
 function showFatal(error) { appRoot().innerHTML = `<main class="auth-shell"><section class="auth-card"><h1>Service indisponible</h1><p class="error-box">${escapeHtml(error.message)}</p><button class="button" onclick="location.reload()">Réessayer</button></section></main>`; }
 
 document.addEventListener('keydown', event => { if (event.key === '/' && state.page === 'tunnels' && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) { event.preventDefault(); qs('#filter')?.focus(); } });
+document.addEventListener('pointerdown', event => {
+  // Le menu reste ouvert pendant une interaction à l'intérieur. Tout clic hors
+  // du burger et de son panneau le ferme avant l'action visée par ce clic.
+  qsa('.tunnel-menu').forEach(container => {
+    if (container.contains(event.target)) return;
+    const menu = qs('.menu-items', container); menu.hidden = true;
+    qs('[data-menu]', container)?.setAttribute('aria-expanded', 'false');
+  });
+});
 boot();

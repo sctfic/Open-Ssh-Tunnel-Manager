@@ -51,9 +51,17 @@ export function channelsHtml(groups, checks = {}) {
     // Pour -R, le port d'écoute est distant et la destination est locale.
     const local = type === '-R' ? `${c.endpoint_host}:${c.endpoint_port}` : `${c.listen_host}:${c.listen_port}`;
     const remote = type === '-R' ? `${c.listen_host}:${c.listen_port}` : type === '-D' ? 'Destination SOCKS dynamique' : `${c.endpoint_host}:${c.endpoint_port}`;
-    const badge = (kind, label) => `<span class="probe probe--${kind} ${check[kind] === true ? 'probe--ok' : ''}" title="${label} : ${check[kind] == null ? 'non disponible' : check[kind] ? 'réussi' : 'échoué'}" aria-label="${label} : ${check[kind] == null ? 'non disponible' : check[kind] ? 'réussi' : 'échoué'}">${icon('check')}</span>`;
+    const badge = (kind, label) => {
+      const latency = check[kind], ok = typeof latency === 'number' && Number.isFinite(latency);
+      const status = ok ? 'réussi' : check[`${kind}Error`] ? 'échoué' : 'non disponible';
+      const timing = ok ? ` · ${latency} ms` : '';
+      const timeout = check[`${kind}Error`] === 'timeout' ? ' · délai dépassé (600 ms)' : '';
+      const unavailable = kind === 'icmp' && check.icmpError === 'ping-unavailable' ? ' · outil ping indisponible' : '';
+      const description = esc(`${label} : ${status}${timing}${timeout}${unavailable}`);
+      return `<span class="probe probe--${kind} ${ok ? 'probe--ok' : ''}" title="${description}" aria-label="${description}">${icon('check')}</span>`;
+    };
     const arrow = type === '-R' ? '←' : type === '-D' ? '⇢' : '→';
-    return `<div class="channel-flow" data-channel-type="${type}" data-channel-port="${port}" data-channel-name="${esc(c.name)}"><strong>${esc(c.name)}</strong><span class="channel-route"><code class="channel-local">${esc(local)}</code><span class="flow-arrow" title="${type}" aria-label="Redirection ${type}">${arrow}</span><code class="channel-remote">${esc(remote)}</code></span><span class="probe-pair">${badge('tcp', 'TCP : écoute et destination par le tunnel')}${badge('icmp', 'ICMP direct depuis le backend')}</span></div>`;
+    return `<div class="channel-flow" data-channel-type="${type}" data-channel-port="${port}" data-channel-name="${esc(c.name)}"><strong>${esc(c.name)}</strong><span class="channel-route"><code class="channel-local">${esc(local)}</code><span class="flow-arrow" title="${type}" aria-label="Redirection ${type}">${arrow}</span><code class="channel-remote">${esc(remote)}</code></span><span class="probe-pair">${badge('tcp', `TCP local ${local}`)}${badge('icmp', 'ICMP direct depuis le backend')}</span></div>`;
   })).join('') || '<p class="muted">Aucun channel. Utilisez + pour en ajouter un.</p>';
 }
 
@@ -99,22 +107,25 @@ export function channelDialog(tunnel, save) {
 
 export function channelContextMenu(event, tunnel, row, actions) {
   event.preventDefault(); document.querySelector('.channel-context')?.remove();
+  document.querySelector('.channel-flow--context')?.classList.remove('channel-flow--context');
+  row.classList.add('channel-flow--context');
   const menu = document.createElement('div'); menu.className = 'channel-context';
   menu.innerHTML = '<button data-rename>Renommer</button><button data-remove>Supprimer</button>';
   menu.style.left = `${Math.min(event.clientX, innerWidth - 160)}px`;
   menu.style.top = `${Math.min(event.clientY, innerHeight - 100)}px`;
   document.body.append(menu);
-  const close = pointer => { if (!menu.contains(pointer.target)) { menu.remove(); document.removeEventListener('pointerdown', close); } };
+  const dismiss = () => { menu.remove(); row.classList.remove('channel-flow--context'); document.removeEventListener('pointerdown', close); };
+  const close = pointer => { if (!menu.contains(pointer.target)) dismiss(); };
   setTimeout(() => document.addEventListener('pointerdown', close));
   qs('[data-rename]', menu).addEventListener('click', () => {
-    menu.remove(); document.removeEventListener('pointerdown', close);
+    dismiss();
     const wrap = document.createElement('div');
     wrap.innerHTML = `<form class="stack"><label>Nouveau nom<input name="name" maxlength="100" value="${esc(row.dataset.channelName)}" required autofocus></label><button class="button button--primary" type="submit">Renommer</button><p class="form-error" role="alert"></p></form>`;
     const dialog = openDialog(`Renommer · ${tunnel.id}`, wrap); const form = qs('form', wrap);
     submit(form, async () => { await actions.rename(row.dataset.channelType, row.dataset.channelPort, formData(form).name); dialog.close(); });
   });
   qs('[data-remove]', menu).addEventListener('click', async () => {
-    menu.remove(); document.removeEventListener('pointerdown', close);
+    dismiss();
     if (confirm(`Supprimer le channel « ${row.dataset.channelName} » ?`)) {
       try { await actions.remove(row.dataset.channelType, row.dataset.channelPort); }
       catch (error) { toast(error.message, 'error'); }

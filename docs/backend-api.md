@@ -127,9 +127,9 @@ par défaut est `127.0.0.1`.
 | `POST /api/v2/tunnels/:id/start` | démarrer, enregistrer l'intention persistante | execute |
 | `POST /api/v2/tunnels/:id/stop` | arrêter et désactiver la reconnexion | execute |
 | `POST /api/v2/tunnels/:id/restart` | arrêter puis démarrer | execute |
-| `POST /api/v2/actions/start` | démarrer les tunnels autorisés | execute |
-| `POST /api/v2/actions/stop` | arrêter les tunnels autorisés | execute |
-| `POST /api/v2/actions/restart` | redémarrer les tunnels autorisés | execute |
+| `POST /api/v2/tunnels/start` | démarrer les tunnels listés dans `{ "ids": [...] }` | execute |
+| `POST /api/v2/tunnels/stop` | arrêter les tunnels listés dans `{ "ids": [...] }` | execute |
+| `POST /api/v2/tunnels/restart` | redémarrer les tunnels listés dans `{ "ids": [...] }` | execute |
 | `POST /api/v2/tunnels/:id/check` | vérifier les endpoints d'un tunnel actif | read |
 
 Les modifications de connexion et de channels exigent un tunnel arrêté (409
@@ -142,13 +142,28 @@ relancés.
 
 ## Channels et clés
 
-`POST /api/v2/tunnels/:id/diagnostics` (read) est appelé à chaque dépliage.
-Il retourne `channels`, indexé par type et port, avec deux booléens `tcp` et `icmp`.
-TCP vérifie l'écoute du port de redirection et l'accès à la destination du channel
-via la session SSH. ICMP lance un ping directement depuis la machine backend vers
-la destination, hors tunnel. Un ping filtré ou indisponible donne false.
-SOCKS n'a pas de destination fixe : les deux valeurs sont null.
-L'interface utilise une coche bleue pour TCP, verte pour ICMP, grise sinon.
+`POST /api/v2/tunnels/:id/diagnostics` (read) est appelé à chaque dépliage,
+au chargement de la page pour tous les tunnels autorisés, même repliés ou masqués
+par le filtre, puis toutes les 30 secondes
+pour tous les tunnels dépliés. Une demande encore en cours n'est pas doublée.
+La première série part en parallèle sans bloquer l'affichage de la page ; ses
+résultats sont conservés pour être visibles dès le dépliage d'un tunnel.
+La réponse `channels`, indexée par type et port, contient directement les délais
+`tcp` et `icmp` en millisecondes. Une valeur null indique un échec ou un test
+inapplicable ; `tcpError` et `icmpError` en donnent la cause.
+TCP ouvre depuis le backend une connexion à l'adresse locale affichée : écoute
+locale pour -L/-D, endpoint local pour -R. Le succès mesure l'établissement TCP,
+pas le service applicatif ni la destination derrière SSH. Timeout absolu : 600 ms,
+résolution DNS incluse, hors attente dans la file des sondes.
+ICMP lance un ping direct vers `endpoint_host`, hors tunnel, limité à 600 ms.
+Un ping filtré ou indisponible donne false. SOCKS n'a pas de destination fixe :
+seul ICMP vaut null ; son port TCP local est testé.
+Les channels sont sondés en parallèle, avec des plafonds globaux de 64 TCP et
+32 pings. Les demandes simultanées d'un même tunnel et les pings simultanés vers
+un même hôte sont mutualisés. Un cycle peut dépasser 30 secondes sous forte charge ;
+son prochain déclenchement est alors ignoré tant que le tunnel est en cours.
+L'interface utilise une coche bleue pour TCP, verte pour ICMP, grise sinon ;
+le temps TCP est disponible au survol de la coche.
 
 Le formulaire d'ajout correspond aux extrémités locales/distantes : pour -L,
 l'écoute est locale ; pour -R, elle est distante. Les sliders de débit couvrent

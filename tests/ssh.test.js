@@ -122,9 +122,9 @@ test('real SSH carries local and reverse forwarding and measures encrypted trans
     assert.equal((await exchange(reversePort, 'reverse hello')).toString(), 'reverse hello');
     const checks = await session.checkChannels(); assert.equal(checks[`-L:${localPort}`].reachable, true); assert.equal(checks[`-R:${reversePort}`].reachable, true);
     const probes = await diagnose(config, session);
-    assert.equal(probes[`-L:${localPort}`].tcp, true);
-    assert.equal(probes[`-R:${reversePort}`].tcp, true);
-    assert.equal(typeof probes[`-L:${localPort}`].icmp, 'boolean');
+    assert.equal(typeof probes[`-L:${localPort}`].tcp, 'number');
+    assert.equal(typeof probes[`-R:${reversePort}`].tcp, 'number');
+    assert.ok(probes[`-L:${localPort}`].icmp === null || typeof probes[`-L:${localPort}`].icmp === 'number');
     const stats = await transport.stats(); assert.ok(stats.upBytes > 24); assert.ok(stats.downBytes > 24); assert.equal(stats.networkOverheadIncluded, false);
   } finally { await session.close(); }
   await assert.rejects(exchange(localPort, 'closed'), /ECONNREFUSED/);

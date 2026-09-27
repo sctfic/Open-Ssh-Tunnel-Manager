@@ -13,6 +13,12 @@ if ! id ostm >/dev/null 2>&1; then
 fi
 install -d -m 0755 /opt/ostm /opt/ostm-runtime
 install -d -m 0700 -o ostm -g ostm /var/lib/ostm
+# Les tests ICMP utilisent le ping iputils. Réparer automatiquement une image
+# Debian minimale où le paquet aurait été retiré après l'installation initiale.
+if ! command -v ping >/dev/null 2>&1; then
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends iputils-ping
+fi
 if ! test -x "$runtime/bin/node"; then
   # Le Pi garde son ancien Node système pour ses autres services. OSTM reçoit un
   # runtime isolé afin de ne pas perturber les applications existantes.
