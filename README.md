@@ -6,13 +6,16 @@ Frontend sombre en HTML, CSS et JavaScript natifs, servi sans compilation.
 
 ## Visualisation du transport SSH
 
-[![Visualisation isométrique d'un port forward SSH local](docs/tunnel-observatory.svg)](svg.html)
+[![Visualisation isométrique d'un port forward SSH local](docs/tunnel-observatory.svg)](https://sctfic.github.io/Open-Ssh-Tunnel-Manager/svg.html)
 
 L'illustration montre le chemin complet d'une redirection `-L` : le trafic
 circule en clair entre les équipements et les deux extrémités SSH, puis il est
 chiffré, compressé et limité pendant son passage dans le tunnel. Les réponses
 empruntent le même chemin en sens inverse. [Ouvrir la visualisation interactive
-des modes `-L`, `-R` et SOCKS](svg.html).
+des modes `-L`, `-R` et SOCKS](https://sctfic.github.io/Open-Ssh-Tunnel-Manager/svg.html).
+
+La démo s'ouvre directement dans le navigateur via GitHub Pages. Sa publication
+est automatiquement actualisée après chaque modification de `svg.html` sur `main`.
 
 - [API et exemples](docs/backend-api.md)
 - [Installation Linux, Nginx et PM2](docs/deployment.md)
