@@ -82,7 +82,7 @@
     <div class="scene-wrap">
       <svg class="scene" id="scene" viewBox="0 0 1400 570" role="img" aria-labelledby="scene-title scene-desc">
         <title id="scene-title">Redirection locale SSH, du poste source au service distant</title>
-        <desc id="scene-desc">Quatre machines en perspective. Les segments externes sont en clair au niveau SSH. Seul le segment entre client et serveur SSH est chiffré, compressé et limité. Les réponses empruntent le chemin inverse.</desc>
+        <desc id="scene-desc">Deux postes sources, deux extrémités SSH et deux services en perspective. Les segments externes sont en clair au niveau SSH. Seul le segment entre client et serveur SSH est chiffré, compressé et limité. Les réponses empruntent le chemin inverse.</desc>
         <defs>
           <filter id="glow" x="-150%" y="-150%" width="400%" height="400%"><feGaussianBlur stdDeviation="3"/><feComposite in="SourceGraphic" operator="over"/></filter>
           <linearGradient id="tube" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#b6a1ff" stop-opacity=".18"/><stop offset=".5" stop-color="#8576ff" stop-opacity=".025"/><stop offset="1" stop-color="#8e70ee" stop-opacity=".2"/></linearGradient>
@@ -91,8 +91,137 @@
           <!-- Les quatre nœuds partagent ces volumes ; les labels restent hors
                des transformations pour préserver une typographie très lisible. -->
           <g id="platform"><ellipse cx="0" cy="24" rx="110" ry="44" fill="url(#halo)"/><path d="m-82 12 64-34 101 34-64 37Z" fill="#0b202b" stroke="#2b5363"/><path d="m-82 12 64-34 101 34-64 37Z" transform="translate(0 7)" fill="none" stroke="#1d394b"/><path d="m-70 13 53-27 88 27-53 29Z" fill="none" stroke="#63d8d6" opacity=".3"/><path d="M-68-80-80 13 19 48 69 15 53-80Z" fill="url(#projection)"/></g>
-          <g id="rack"><path class="node-side" d="m18-96 34-18v96L18 0Z"/><path class="node-face" d="m-44-116 62 20V0l-62-20Z"/><path class="node-top" d="m-44-116 34-18 62 20-34 18Z"/><g class="node-wire"><path d="m-35-94 44 14v18l-44-14Z m0 33 44 14v18l-44-14Z"/><path d="m-30-86 22 7m-22 26 22 7"/><path d="m25-88 19-10m-19 21 19-10m-19 21 19-10m-19 21 19-10" opacity=".45"/></g><circle cx="1" cy="-71" r="2" fill="#7af2d7" filter="url(#glow)"/><circle cx="1" cy="-38" r="2" fill="#b39fff" filter="url(#glow)"/><path d="m-30-24 27 9" stroke="#82d5d9"/></g>
-          <g id="desktop"><path class="node-face" d="m-49-104 82 25v58l-82-25Z"/><path class="node-side" d="m33-79 10-6v58l-10 6Z"/><path class="node-top" d="m-49-104 10-6 82 25-10 6Z"/><path d="m-40-91 62 19v36l-62-19Z" fill="#10343d" stroke="#488796"/><path d="m-30-74 10 10-10 4m19 2 18 6" stroke="#73e8df" fill="none" stroke-width="2"/><path d="M-7-33v21m-23 3 25-11 23 8-25 11Z" class="node-wire"/></g>
+          <!-- Matériaux communs aux équipements : métal sombre, arêtes satinées et verre. -->
+          <linearGradient id="equipment-metal" x2="1" y2=".7"><stop stop-color="#1b303c"/><stop offset=".45" stop-color="#0c1a25"/><stop offset="1" stop-color="#152b37"/></linearGradient>
+          <linearGradient id="equipment-side" x2="1" y2="0"><stop stop-color="#102430"/><stop offset="1" stop-color="#060e18"/></linearGradient>
+          <linearGradient id="equipment-glass" x2=".8" y2="1"><stop stop-color="#163c48"/><stop offset="1" stop-color="#091923"/></linearGradient>
+          <linearGradient id="equipment-paper" x2=".3" y2="1"><stop stop-color="#deeaed"/><stop offset="1" stop-color="#87a8b4"/></linearGradient>
+          <g id="rack" stroke-linejoin="round">
+            <path d="M-39-119 25-99 51-114-13-134Z" fill="#1a303d" stroke="#77929f" stroke-width=".65"/>
+            <path d="M25-99 51-114V-7L25 8Z" fill="url(#equipment-side)" stroke="#486776" stroke-width=".65"/>
+            <path d="M-39-119 25-99V8L-39-12Z" fill="url(#equipment-metal)" stroke="#819aa7" stroke-width=".7"/>
+            <g transform="matrix(1 .3125 0 1 -39 -119)">
+              <rect x="3" y="3" width="58" height="100" rx="1.5" fill="none" stroke="#4c6878" stroke-width=".45"/>
+              <path d="M8 8h20M8 95h22" stroke="#8dabb7" stroke-width=".65"/>
+              <rect x="7" y="13" width="50" height="21" rx="1.6" fill="#08151f" stroke="#527383" stroke-width=".55"/><path d="M10 18v11m44-11v11" stroke="#a1bac4" stroke-width=".8"/><rect x="15" y="19" width="4" height="9" rx=".6" fill="#182f3b" stroke="#486577" stroke-width=".4"/><rect x="21" y="19" width="4" height="9" rx=".6" fill="#182f3b" stroke="#486577" stroke-width=".4"/><rect x="27" y="19" width="4" height="9" rx=".6" fill="#182f3b" stroke="#486577" stroke-width=".4"/><rect x="33" y="19" width="4" height="9" rx=".6" fill="#182f3b" stroke="#486577" stroke-width=".4"/><circle cx="44" cy="20" r="1" fill="#8fe4cd"/><circle cx="48" cy="20" r=".8" fill="#9dacf4"/><path d="M42 26h8m-8 3h8" stroke="#547586" stroke-width=".5"/><rect x="7" y="39" width="50" height="21" rx="1.6" fill="#08151f" stroke="#527383" stroke-width=".55"/><path d="M10 44v11m44-11v11" stroke="#a1bac4" stroke-width=".8"/><rect x="15" y="45" width="4" height="9" rx=".6" fill="#182f3b" stroke="#486577" stroke-width=".4"/><rect x="21" y="45" width="4" height="9" rx=".6" fill="#182f3b" stroke="#486577" stroke-width=".4"/><rect x="27" y="45" width="4" height="9" rx=".6" fill="#182f3b" stroke="#486577" stroke-width=".4"/><rect x="33" y="45" width="4" height="9" rx=".6" fill="#182f3b" stroke="#486577" stroke-width=".4"/><circle cx="44" cy="46" r="1" fill="#8fe4cd"/><circle cx="48" cy="46" r=".8" fill="#9dacf4"/><path d="M42 52h8m-8 3h8" stroke="#547586" stroke-width=".5"/><rect x="7" y="65" width="50" height="21" rx="1.6" fill="#08151f" stroke="#527383" stroke-width=".55"/><path d="M10 70v11m44-11v11" stroke="#a1bac4" stroke-width=".8"/><rect x="15" y="71" width="4" height="9" rx=".6" fill="#182f3b" stroke="#486577" stroke-width=".4"/><rect x="21" y="71" width="4" height="9" rx=".6" fill="#182f3b" stroke="#486577" stroke-width=".4"/><rect x="27" y="71" width="4" height="9" rx=".6" fill="#182f3b" stroke="#486577" stroke-width=".4"/><rect x="33" y="71" width="4" height="9" rx=".6" fill="#182f3b" stroke="#486577" stroke-width=".4"/><circle cx="44" cy="72" r="1" fill="#8fe4cd"/><circle cx="48" cy="72" r=".8" fill="#9dacf4"/><path d="M42 78h8m-8 3h8" stroke="#547586" stroke-width=".5"/>
+              <circle cx="52" cy="95" r="2.2" fill="#081822" stroke="#809ba6" stroke-width=".6"/><path d="M52 92v3" stroke="#a2e4dc" stroke-width=".7"/>
+            </g>
+            <g transform="matrix(1 -.577 0 1 25 -99)" stroke="#527180" stroke-width=".5" opacity=".65"><path d="M6 23h14"/><path d="M6 28h14"/><path d="M6 33h14"/><path d="M6 38h14"/><path d="M6 43h14"/><path d="M6 48h14"/><path d="M6 53h14"/><path d="M6 58h14"/><path d="M6 63h14"/><path d="M6 68h14"/><path d="M6 73h14"/><path d="M6 78h14"/><path d="M6 83h14"/></g>
+            <path d="M-34-10v4l8 2v-4M17 6v4l7 2V8" fill="#071019" stroke="#3c596a" stroke-width=".6"/>
+          </g>
+          <g id="desktop" stroke-linejoin="round">
+            <path d="M-9-36v25l8 3v-25Z" fill="#35505c" stroke="#96acb6" stroke-width=".6"/>
+            <path d="M-24-6-5-16 18-9-1 1Z" fill="#1a303d" stroke="#718e9c" stroke-width=".65"/>
+            <path d="M-24-6-1 1 18-9v3L-1 4-24-3Z" fill="#0a1720" stroke="#456577" stroke-width=".45"/>
+            <path d="M-51-111 35-85 39-88-47-114Z" fill="#304754" stroke="#8aabb7" stroke-width=".6"/>
+            <path d="M35-85 39-88v62l-4 3Z" fill="#09141e" stroke="#567688" stroke-width=".6"/>
+            <g transform="matrix(1 .302326 0 1 -51 -111)">
+              <rect width="86" height="62" rx="2" fill="#0a1620" stroke="#99b2bd" stroke-width=".7"/>
+              <rect x="3" y="3" width="80" height="53" rx=".7" fill="url(#equipment-glass)" stroke="#355864" stroke-width=".4"/>
+              <path d="M4 4h77L4 33Z" fill="#c2f0f1" opacity=".045"/>
+              <path d="M9 12h20m-20 5h39M12 27l5 4-5 4m12 0h13" stroke="#79cfc9" stroke-width="1" fill="none"/>
+              <path d="M10 44h26m4 0h16m-46 4h43" stroke="#508998" stroke-width=".65"/>
+              <circle cx="43" cy="1.5" r=".65" fill="#67848f"/><circle cx="77" cy="59" r=".6" fill="#7af2d7"/>
+            </g>
+            <g transform="matrix(1 .302326 -1 .55 -27 -7)">
+              <rect width="61" height="20" rx="2" fill="#16303c" stroke="#7898a5" stroke-width=".65"/>
+              <path d="M5 5h51M5 9h51M5 13h51M19 17h25M11 3v11m8-11v11m8-11v11m8-11v11m8-11v11m8-11v11" stroke="#6a96a4" stroke-width=".45"/>
+            </g>
+            <g transform="matrix(1 .302326 -1 .55 45 11)"><rect width="10" height="16" rx="5" fill="#203b46" stroke="#84a2ad" stroke-width=".6"/><path d="M5 2v5" stroke="#aad2d5" stroke-width=".7"/></g>
+          </g>
+          <!-- Le portable et l'imprimante partagent la même perspective que les racks. -->
+          <!-- Le miroir horizontal oriente le clavier du portable vers la gauche dans tous les modes. -->
+          <!-- Client SSH : station compacte distincte du serveur en rack. -->
+          <g id="ssh-client" stroke-linejoin="round">
+            <path d="M-32-89 17-74 49-92 0-107Z" fill="#203641" stroke="#829ca9" stroke-width=".65"/>
+            <path d="M17-74 49-92v85L17 11Z" fill="url(#equipment-side)" stroke="#486b7c" stroke-width=".65"/>
+            <path d="M-32-89 17-74v85l-49-15Z" fill="url(#equipment-metal)" stroke="#8ba6b1" stroke-width=".7"/>
+            <g transform="matrix(1 .306122 0 1 -32 -89)">
+              <rect x="5" y="7" width="39" height="31" rx="1.5" fill="url(#equipment-glass)" stroke="#4f8693" stroke-width=".6"/>
+              <path d="m11 17 5 4-5 4m11 0h11M11 31h25" fill="none" stroke="#88dbce" stroke-width=".85"/>
+              <circle cx="12" cy="49" r="3" fill="#0b202c" stroke="#8badba" stroke-width=".65"/><path d="M12 45v4" stroke="#8ce4d6" stroke-width=".8"/>
+              <rect x="24" y="47" width="7" height="3" rx=".5" fill="#030b12" stroke="#698997" stroke-width=".5"/><rect x="34" y="47" width="7" height="3" rx=".5" fill="#030b12" stroke="#698997" stroke-width=".5"/>
+              <path d="M8 61h32m-32 4h32m-32 4h32m-32 4h32" stroke="#496d7f" stroke-width=".6"/>
+              <circle cx="38" cy="80" r=".8" fill="#8aebd2"/>
+            </g>
+            <g transform="matrix(1 -.5625 0 1 17 -74)" stroke="#476473" stroke-width=".5"><path d="M7 15h18"/><path d="M7 19h18"/><path d="M7 23h18"/><path d="M7 27h18"/><path d="M7 31h18"/><path d="M7 35h18"/><path d="M7 39h18"/><path d="M7 43h18"/><path d="M7 47h18"/><path d="M7 51h18"/><path d="M7 55h18"/><path d="M7 59h18"/><path d="M7 63h18"/><path d="M7 67h18"/></g>
+            <path d="M-28-2v5l8 2V0M9 10v4l7 2v-5" fill="#07121b" stroke="#3e5d6e" stroke-width=".55"/>
+          </g>
+          <!-- Scanner à plat : vitre, document, barre optique et capot ouvert. -->
+          <g id="scanner" stroke-linejoin="round">
+            <path d="M-55-31 18-9 18 5-55-17Z" fill="url(#equipment-metal)" stroke="#829fac" stroke-width=".65"/>
+            <path d="M18-9 57-31 57-17 18 5Z" fill="url(#equipment-side)" stroke="#496f81" stroke-width=".65"/>
+            <path d="M-55-31-16-53 57-31 18-9Z" fill="#233d49" stroke="#95adb8" stroke-width=".7"/>
+            <path d="M-45-32-15-48 47-30 17-14Z" fill="url(#equipment-glass)" stroke="#6993a1" stroke-width=".55"/>
+            <path d="M-35-32-14-44 34-30 13-18Z" fill="url(#equipment-paper)" stroke="#99b7bf" stroke-width=".4"/>
+            <path d="m-21-32 30 9m-25-12 30 9m-25-12 19 6" stroke="#7796a4" stroke-width=".65"/>
+            <path d="M-29-40 34-21" stroke="#65eddf" stroke-width="1.1" filter="url(#glow)"/>
+            <!-- Le capot pivote autour de l'arête arrière de la vitre. -->
+            <path d="M-16-53-24-109 49-87 57-31Z" fill="url(#equipment-metal)" stroke="#92adb9" stroke-width=".75"/>
+            <path d="M-11-57-17-99 43-81 49-39Z" fill="#9fb7bf" stroke="#c2d4da" stroke-width=".55"/>
+            <path d="M-8-58-14-95 40-79 46-42Z" fill="#bdcdd2" opacity=".55"/>
+            <path d="M-13-51-5-49M43-35 53-32" stroke="#a4bbc4" stroke-width="2.2" stroke-linecap="round"/>
+            <path d="M-46-20-22-13" stroke="#4b6c7d" stroke-width=".65"/>
+            <circle cx="8" cy="-5" r="2" fill="#0c2531" stroke="#8bb8c2" stroke-width=".6"/><circle cx="-1" cy="-8" r=".8" fill="#7af2d7"/>
+          </g>
+          <!-- Portable : écran vertical et clavier partagent les mêmes deux
+               points de charnière. Le clavier avance vers la gauche du dessin. -->
+          <g id="laptop">
+            <!-- Épaisseur du châssis sous le plateau du clavier. -->
+            <path d="M-56-8 16 14 16 19-56-3Z" fill="#10222e" stroke="#548393"/>
+            <path d="M16 14 60-10 60-5 16 19Z" fill="#091720" stroke="#456c7e"/>
+            <path d="M-12-32 60-10 16 14-56-8Z" fill="#183743" stroke="#79bcc6" stroke-width="1.2"/>
+            <!-- Cette matrice projette toutes les touches sur le même plan,
+                 sans déformer indépendamment les rangées et le pavé tactile. -->
+            <g transform="matrix(1 .305556 -1 .545455 -12 -32)">
+              <rect x="6" y="7" width="60" height="21" rx="2" fill="#091a24" stroke="#527f8d" stroke-width=".8"/>
+              <g fill="none" stroke="#77b8c3" stroke-width=".65">
+                <path d="M9 13H63M9 19H63M9 25H63"/>
+                <path d="M15 9V25M23 9V25M31 9V25M39 9V25M47 9V25M55 9V25"/>
+              </g>
+              <rect x="26" y="32" width="20" height="8" rx="1.5" fill="#102a37" stroke="#729caa" stroke-width=".8"/>
+            </g>
+            <!-- Écran ouvert, bord fin et charnière sur l'arête arrière. -->
+            <path d="M54-74 58-77 64-13 60-10Z" fill="#08141e" stroke="#426b7f"/>
+            <path d="M-18-96-14-99 58-77 54-74Z" fill="#21404c" stroke="#78a9b9"/>
+            <path d="M-18-96 54-74 60-10-12-32Z" fill="#0c1c29" stroke="#83bdca" stroke-width="1.2" stroke-linejoin="round"/>
+            <path d="M-11-85 48-67 52-22-7-40Z" fill="#103a46" stroke="#407887" stroke-width=".8"/>
+            <path d="M-10-84 47-67 49-48Z" fill="#8be4e8" opacity=".07"/>
+            <path d="m1-65 8 9-7 4m15 2 15 5" fill="none" stroke="#85f2e4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="18" cy="-81" r="1.1" fill="#8ca9b5"/>
+            <path d="M-11-31 59-10" stroke="#a3c8d1" stroke-width="2.2" stroke-linecap="round"/>
+            <path d="M-49-4-37 0" stroke="#6998a6" stroke-width="1.2"/>
+            <circle cx="8" cy="15" r="1" fill="#7af2d7"/>
+          </g>
+          <g id="printer" stroke-linejoin="round">
+            <!-- Le support et la feuille suivent l'arête arrière du capot.
+                 Le boîtier masque leur pied ; la lèvre du bac est dessinée devant. -->
+            <path d="M-12-75-16-122 44-104 48-57Z" fill="#132a36" stroke="#6d909e" stroke-width=".6"/>
+            <path d="M-5-73-8-117 37-103 40-59Z" fill="url(#equipment-paper)" stroke="#b2cbd2" stroke-width=".5"/>
+            <path d="M-6-115 35-102" stroke="#edf5f6" stroke-width=".65"/>
+            <path d="M-48-55 19-35 54-55-13-75Z" fill="#223943" stroke="#91aab4" stroke-width=".65"/>
+            <path d="M19-35 54-55v46L19 11Z" fill="url(#equipment-side)" stroke="#4d6e7e" stroke-width=".65"/>
+            <path d="M-48-55 19-35v46l-67-20Z" fill="url(#equipment-metal)" stroke="#839eaa" stroke-width=".7"/>
+            <path d="M-37-54 17-38 36-49-18-65Z" fill="#102630" stroke="#527583" stroke-width=".5"/>
+            <path d="M-29-54 12-42" stroke="#030c14" stroke-width="3"/>
+            <!-- Fente d'alimentation et guides centrés sur la feuille vierge. -->
+            <path d="M-9-72 44-56" stroke="#06121b" stroke-width="3.2" stroke-linecap="round"/>
+            <path d="M-10-73-10-80-5-78-4-71M39-58 38-65 43-63 44-56" fill="#243e49" stroke="#86a5b1" stroke-width=".6"/>
+            <path d="M-7-70 42-55" stroke="#7999a6" stroke-width=".7"/>
+            <g transform="matrix(1 .298507 0 1 -48 -55)">
+              <rect x="7" y="9" width="23" height="10" rx="1" fill="#102f3c" stroke="#65929f" stroke-width=".55"/>
+              <path d="M10 12h13m-13 3h9" stroke="#8bdacf" stroke-width=".65"/>
+              <circle cx="38" cy="14" r="2.2" fill="#142d38" stroke="#8daab4" stroke-width=".6"/><circle cx="47" cy="14" r=".85" fill="#f0c481"/>
+              <rect x="6" y="26" width="55" height="12" rx="1.5" fill="#030c14" stroke="#527282" stroke-width=".55"/>
+              <path d="M10 29h47" stroke="#8a9faa" stroke-width="1"/>
+              <path d="M3 42h61" stroke="#456372" stroke-width=".5"/>
+            </g>
+            <!-- Bac de sortie et feuille imprimée se prolongent sur le même plan. -->
+            <path d="M-40-23 10-8-9 7-59-8Z" fill="#152c38" stroke="#75929e" stroke-width=".6"/>
+            <path d="M-34-21 4-10-12 1-50-10Z" fill="url(#equipment-paper)" stroke="#9bb7c1" stroke-width=".45"/>
+            <path d="m-33-16 24 7m-28-4 18 5" stroke="#6d92a2" stroke-width=".55"/>
+            <g transform="matrix(1 -.571429 0 1 19 -35)" stroke="#4a6d7c" stroke-width=".5"><path d="M9 14h18M9 18h18M9 22h18M9 26h18"/><rect x="23" y="34" width="5" height="5" fill="#071019"/></g>
+          </g>
         </defs>
         <!-- Le plan de sol oblique donne de la profondeur sans rendre les textes
              dépendants d'une caméra WebGL ou d'un moteur 3D. -->
@@ -107,31 +236,39 @@
           <g id="rings" fill="none" stroke="#a597f5"></g>
           <ellipse cx="459" cy="326" rx="17" ry="43" fill="#8477eb14" stroke="#baaaff"/><ellipse cx="884" cy="270" rx="17" ry="43" fill="#8477eb14" stroke="#baaaff"/>
         </g>
-        <path d="M174 349 432 328" class="plain"/><path d="M926 270 1195 318" class="plain"/>
+        <!-- Deux branches TCP indépendantes convergent dans la même session SSH. -->
+        <path d="M174 389 432 328" class="plain"/><path d="M926 270 1195 390" class="plain"/>
+        <path id="extra-left-link" d="M174 170C290 170 330 290 432 328" class="plain" style="stroke:#f0c481"/>
+        <path id="extra-right-link" d="M926 270C1040 270 1090 175 1195 170" class="plain" style="stroke:#f0c481"/>
+        <path d="M464 326C605 329 752 296 877 273" fill="none" stroke="#f0c481" stroke-width="1.3" opacity=".6"/>
         <path d="M464 316C605 319 752 286 877 263" class="encrypted"/><path d="M464 337C605 340 752 307 877 284" class="encrypted" opacity=".35"/>
         <!-- Des chemins orientés complets sont reconstruits pour chaque mode.
              Les paquets retour circulent toujours dans le sens opposé. -->
         <g id="packets"></g>
-        <g transform="translate(164 349)"><use href="#platform"/><use href="#desktop"/></g>
-        <g transform="translate(446 328)"><use href="#platform"/><use href="#rack"/></g>
+        <g transform="translate(164 389)"><use href="#platform"/><use id="primary-left-icon" href="#desktop"/></g>
+        <g transform="translate(446 328)"><use href="#platform"/><use href="#ssh-client"/></g>
         <g transform="translate(905 270)"><use href="#platform"/><use href="#rack"/></g>
-        <g transform="translate(1220 323)"><use href="#platform"/><use href="#desktop"/></g>
+        <g transform="translate(1220 390)"><use href="#platform"/><use id="primary-right-icon" href="#scanner"/></g>
+        <g transform="translate(164 170)"><use href="#platform"/><use id="extra-left-icon" href="#laptop"/></g>
+        <g transform="translate(1220 170)"><use href="#platform"/><use id="extra-right-icon" href="#printer"/></g>
         <g text-anchor="middle">
-          <text x="164" y="419" class="micro" id="left-role">01 / ORIGINE</text><text x="164" y="442" class="label" id="left-name">POSTE SOURCE</text><text x="164" y="463" class="caption" id="left-ip">192.168.1.24</text>
-          <text x="446" y="399" class="micro">FRONTIÈRE SSH / CLIENT</text><text x="446" y="422" class="label">CLIENT SSH · OSTM</text><text x="446" y="443" class="caption" id="client-ip">192.168.1.10 : 8080</text>
+          <text x="164" y="228" class="micro" id="extra-left-role">SOURCE / IMPRESSION</text><text x="164" y="250" class="label" id="extra-left-name">PC PORTABLE</text><text x="164" y="269" class="caption" id="extra-left-ip">192.168.1.25</text>
+          <text x="1220" y="228" class="micro" id="extra-right-role">SERVICE / IMPRESSION</text><text x="1220" y="250" class="label" id="extra-right-name">IMPRIMANTE</text><text x="1220" y="269" class="caption" id="extra-right-ip">10.20.0.60 : 9100</text>
+          <text x="164" y="459" class="micro" id="left-role">RÉCEPTION / NUMÉRISATION</text><text x="164" y="482" class="label" id="left-name">POSTE SOURCE</text><text x="164" y="503" class="caption" id="left-ip">192.168.1.24</text>
+          <text x="446" y="399" class="micro">FRONTIÈRE SSH / CLIENT</text><text x="446" y="422" class="label">CLIENT SSH · OSTM</text><text x="446" y="443" class="caption" id="client-ip">192.168.1.10 : 8080 / 9100</text>
           <text x="905" y="348" class="micro">FRONTIÈRE SSH / SERVEUR</text><text x="905" y="371" class="label">SERVEUR SSH</text><text x="905" y="392" class="caption" id="server-ip">ssh.example.net : 22</text>
-          <text x="1220" y="393" class="micro" id="right-role">04 / DESTINATION</text><text x="1220" y="416" class="label" id="right-name">SERVICE FINAL</text><text x="1220" y="437" class="caption" id="right-ip">10.20.0.50 : 80</text>
+          <text x="1220" y="459" class="micro" id="right-role">ÉMISSION / NUMÉRISATION</text><text x="1220" y="482" class="label" id="right-name">SCANNER</text><text x="1220" y="503" class="caption" id="right-ip">10.20.0.50 : 80</text>
         </g>
         <g transform="translate(620 113)"><path d="m0 0 11-6 11 6v12l-11 7L0 12Z" fill="#9b85ff12" stroke="#b3a0ff"/><path d="M7 6V3a4 4 0 0 1 8 0v3M6 6h10v7H6Z" fill="none" stroke="#e0d9ff"/><text x="35" y="3" fill="#dddaff" font-size="13" letter-spacing="2">TRANSPORT SSH</text><text x="35" y="22" class="micro">CHIFFRÉ · COMPRESSÉ · LIMITÉ</text><path d="M95 36v60" stroke="#8576b6" stroke-dasharray="2 4"/><circle cx="95" cy="100" r="3" fill="#b3a0ff"/></g>
-        <g text-anchor="middle"><text x="290" y="287" class="flow-label" id="left-flow">EN CLAIR →</text><text x="1066" y="233" class="flow-label" id="right-flow">EN CLAIR →</text><text x="690" y="388" fill="#c8baff" font-size="10" id="direction">REQUÊTE →   /   ← RÉPONSE</text></g>
+        <g text-anchor="middle"><text x="290" y="287" class="flow-label" id="left-flow">← DOCUMENTS EN CLAIR</text><text x="1066" y="233" class="flow-label" id="right-flow">← DOCUMENTS EN CLAIR</text><text x="690" y="388" fill="#c8baff" font-size="10" id="direction">← NUMÉRISATION   /   IMPRESSION →</text></g>
         <text x="42" y="539" class="micro">LES LIENS EXTERNES NE SONT PAS PROTÉGÉS PAR SSH</text><text x="1358" y="539" text-anchor="end" class="micro">TCP BIDIRECTIONNEL / UNE SESSION SSH</text>
       </svg>
     </div>
-    <div class="legend"><span><i class="swatch"></i>Trajet de la requête</span><span><i class="swatch secure"></i>Enveloppe SSH</span><span><i class="swatch return"></i>Réponse</span><span class="legend-end">TOPOLOGIE FIXE · DIRECTION VARIABLE</span></div>
+    <div class="legend"><span><i class="swatch"></i>Documents numérisés ←</span><span><i class="swatch" style="background:#f0c481"></i>Flux impression · 9100</span><span><i class="swatch secure"></i>Enveloppe SSH</span><span><i class="swatch return"></i>Échanges de contrôle</span><span class="legend-end">TOPOLOGIE FIXE · DIRECTION VARIABLE</span></div>
   </section>
   <div class="details" aria-live="polite">
-    <section class="detail"><h2 id="mode-heading">01 / LOCAL FORWARD</h2><strong id="summary">Un service distant, accessible localement.</strong><p id="explanation">Le poste source se connecte au port 8080 du client SSH. Le serveur SSH ouvre ensuite une connexion vers le service final sur le port 80.</p></section>
-    <section class="detail"><h2>CHEMIN DE LA CONNEXION</h2><div class="chain" id="chain">Poste source → Client SSH<br>→ Serveur SSH → Service final</div><p id="listener">Écoute : client SSH, 0.0.0.0:8080.<br>La réponse parcourt le même chemin en sens inverse.</p></section>
+    <section class="detail"><h2 id="mode-heading">01 / LOCAL FORWARD</h2><strong id="summary">Deux services distants, une session SSH.</strong><p id="explanation">Le PC fixe ouvre la connexion au scanner distant via le port 8080 du client SSH. Les documents numérisés reviennent du scanner vers le poste, dans le sens des particules colorées. Le portable rejoint son port 9100 pour imprimer sur 10.20.0.60:9100. Chaque connexion utilise un channel indépendant dans la même session SSH.</p></section>
+    <section class="detail"><h2>CHEMIN DE LA CONNEXION</h2><div class="chain" id="chain">Scanner → Serveur SSH → Client SSH → PC fixe<br>Portable → Client SSH → Serveur SSH → Imprimante</div><p id="listener">Écoutes : client SSH, ports 8080 et 9100.<br>Les connexions TCP restent bidirectionnelles ; les particules colorées indiquent le sens des documents.</p></section>
     <section class="detail"><h2>FRONTIÈRE DE PROTECTION</h2><div class="tags"><span class="tag">CHIFFREMENT SSH</span><span class="tag">COMPRESSION</span><span class="tag">LIMITES UP / DOWN</span></div><p>Appliqués entre les deux extrémités SSH. Les limites portent sur le trafic réseau après compression et chiffrement. Un protocole comme HTTPS peut aussi chiffrer les segments externes.</p></section>
   </div>
   <footer class="bottomline"><span>OSTM / TUNNEL OBSERVATORY</span><span>CONCEPT INTERACTIF · LOPEZ Alban</span></footer>
@@ -140,9 +277,9 @@
   // Les données décrivent l'initiateur TCP, pas un sens exclusif de circulation :
   // chaque connexion transporte des requêtes ET des réponses.
   const modes = {
-    L: { color:'#65eddf', heading:'01 / LOCAL FORWARD', summary:'Un service distant, accessible localement.', explanation:'Le poste source se connecte au port 8080 du client SSH. Le serveur SSH ouvre ensuite une connexion vers le service final sur le port 80.', leftRole:'01 / ORIGINE', leftName:'POSTE SOURCE', leftIp:'192.168.1.24', rightRole:'04 / DESTINATION', rightName:'SERVICE FINAL', rightIp:'10.20.0.50 : 80', client:'192.168.1.10 : 8080', server:'ssh.example.net : 22', chain:'Poste source → Client SSH<br>→ Serveur SSH → Service final', listener:'Écoute : client SSH, 0.0.0.0:8080.', title:'Redirection locale : poste source, client SSH, serveur SSH, service distant.' },
-    R: { color:'#f0c481', heading:'02 / REMOTE FORWARD', summary:'Un service local, accessible à distance.', explanation:'Le poste distant se connecte au port 9000 ouvert sur le serveur SSH. La demande traverse le tunnel vers le client SSH, qui contacte le service local sur le port 3000.', leftRole:'04 / DESTINATION', leftName:'SERVICE LOCAL', leftIp:'192.168.1.50 : 3000', rightRole:'01 / ORIGINE', rightName:'POSTE DISTANT', rightIp:'10.20.0.24', client:'192.168.1.10 · client SSH', server:'ssh.example.net · écoute :9000', chain:'Poste distant → Serveur SSH<br>→ Client SSH → Service local', listener:'Écoute : serveur SSH, port 9000 (selon GatewayPorts).', title:'Redirection distante : poste distant, serveur SSH, client SSH, service local.' },
-    D: { color:'#9cc3ff', heading:'03 / DYNAMIC FORWARD', summary:'Une destination choisie à chaque connexion.', explanation:'L’application du poste source utilise le proxy SOCKS du client SSH. Elle demande une destination ; le serveur SSH ouvre la connexion vers cet hôte et ce port.', leftRole:'01 / ORIGINE SOCKS', leftName:'APPLICATION', leftIp:'192.168.1.24 · client SOCKS', rightRole:'04 / DESTINATION VARIABLE', rightName:'SERVICE DEMANDÉ', rightIp:'exemple : api.example.net : 443', client:'192.168.1.10 : 1080', server:'ssh.example.net : 22', chain:'Application → Proxy SOCKS / SSH<br>→ Serveur SSH → Destination choisie', listener:'Écoute SOCKS : client SSH, port 1080.', title:'Proxy SOCKS dynamique : application, client SSH, serveur SSH, destination choisie.' }
+    L: { color:'#65eddf', heading:'01 / LOCAL FORWARD', summary:'Deux services distants, une session SSH.', explanation:'Le PC fixe ouvre la connexion au scanner distant via le port 8080 du client SSH. Les documents numérisés reviennent du scanner vers le poste, dans le sens des particules colorées. Le portable rejoint son port 9100 pour imprimer sur 10.20.0.60:9100. Chaque connexion utilise un channel indépendant dans la même session SSH.', leftRole:'01 / ORIGINE', leftName:'POSTE SOURCE', leftIp:'192.168.1.24', rightRole:'04 / DESTINATION', rightName:'SCANNER', rightIp:'10.20.0.50 : 80', client:'192.168.1.10 : 8080 / 9100', server:'ssh.example.net : 22', chain:'Scanner → Serveur SSH → Client SSH → PC fixe<br>Portable → Client SSH → Serveur SSH → Imprimante', listener:'Écoutes : client SSH, ports 8080 et 9100.', title:'Redirection locale : poste source, client SSH, serveur SSH, service distant.' },
+    R: { color:'#f0c481', heading:'02 / REMOTE FORWARD', summary:'Un service local, accessible à distance.', explanation:'Le scanner se connecte au port 9000 du serveur SSH pour envoyer les documents au service de réception :3000 du poste source, via le client SSH.', leftRole:'04 / DESTINATION', leftName:'POSTE SOURCE', leftIp:'192.168.1.24 : 3000', rightRole:'01 / ORIGINE', rightName:'SCANNER', rightIp:'10.20.0.50 · envoi vers :9000', client:'192.168.1.10 · client SSH', server:'ssh.example.net · écoute :9000', chain:'Poste distant → Serveur SSH<br>→ Client SSH → Service local', listener:'Écoute : serveur SSH, port 9000 (selon GatewayPorts).', title:'Redirection distante : poste distant, serveur SSH, client SSH, service local.' },
+    D: { color:'#9cc3ff', heading:'03 / DYNAMIC FORWARD', summary:'Une destination choisie à chaque connexion.', explanation:'L’application du poste source utilise le proxy SOCKS du client SSH. Elle demande une destination ; le serveur SSH ouvre la connexion vers cet hôte et ce port.', leftRole:'01 / ORIGINE SOCKS', leftName:'APPLICATION', leftIp:'192.168.1.24 · client SOCKS', rightRole:'04 / DESTINATION VARIABLE', rightName:'SCANNER', rightIp:'10.20.0.50 : 80', client:'192.168.1.10 : 1080', server:'ssh.example.net : 22', chain:'Application → Proxy SOCKS / SSH<br>→ Serveur SSH → Destination choisie', listener:'Écoute SOCKS : client SSH, port 1080.', title:'Proxy SOCKS dynamique : application, client SSH, serveur SSH, destination choisie.' }
   };
   const svg = document.getElementById('scene'), namespace = 'http://www.w3.org/2000/svg';
   const svgElement = (name, attributes) => { const element = document.createElementNS(namespace,name); for (const [key,value] of Object.entries(attributes)) element.setAttribute(key,value); return element; };
@@ -158,18 +295,47 @@
     const data=modes[mode], reverse=mode==='R';
     document.documentElement.style.setProperty('--flow',data.color);
     document.querySelectorAll('[data-mode]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.mode===mode)));
-    const fields={'mode-heading':data.heading,summary:data.summary,explanation:data.explanation,'left-role':data.leftRole,'left-name':data.leftName,'left-ip':data.leftIp,'right-role':data.rightRole,'right-name':data.rightName,'right-ip':data.rightIp,'client-ip':data.client,'server-ip':data.server,'scene-title':data.title,'left-flow':mode==='D'?'SOCKS →':reverse?'← EN CLAIR':'EN CLAIR →','right-flow':reverse?'← EN CLAIR':'EN CLAIR →',direction:reverse?'← REQUÊTE   /   RÉPONSE →':'REQUÊTE →   /   ← RÉPONSE'};
+    const fields={'mode-heading':data.heading,summary:data.summary,explanation:data.explanation,'left-role':data.leftRole,'left-name':data.leftName,'left-ip':data.leftIp,'right-role':data.rightRole,'right-name':data.rightName,'right-ip':data.rightIp,'client-ip':data.client,'server-ip':data.server,'scene-title':data.title+' Deux postes et deux services, dont une imprimante sur le port 9100.','left-flow':'← DOCUMENTS EN CLAIR','right-flow':'← DOCUMENTS EN CLAIR',direction:'← NUMÉRISATION   /   IMPRESSION '+(reverse?'←':'→')};
     for (const [id,text] of Object.entries(fields)) document.getElementById(id).textContent=text;
-    document.getElementById('chain').innerHTML=data.chain;
-    document.getElementById('listener').textContent=data.listener+' La réponse parcourt le même chemin en sens inverse.';
+    // En -R, les sources sont côté serveur : déplacer aussi les icônes permet
+    // de conserver le rôle de l'imprimante comme destination du port 9100.
+    document.getElementById('primary-left-icon').setAttribute('href','#desktop');
+    document.getElementById('primary-right-icon').setAttribute('href','#scanner');
+    document.getElementById('extra-left-icon').setAttribute('href',reverse?'#printer':'#laptop');
+    document.getElementById('extra-right-icon').setAttribute('href',reverse?'#laptop':'#printer');
+    const extra = reverse
+      ? {'extra-left-role':'SERVICE / IMPRESSION','extra-left-name':'IMPRIMANTE','extra-left-ip':'192.168.1.60 : 9100','extra-right-role':'SOURCE / IMPRESSION','extra-right-name':'PC PORTABLE','extra-right-ip':'10.20.0.25'}
+      : {'extra-left-role':mode==='D'?'SOURCE / CLIENT SOCKS':'SOURCE / IMPRESSION','extra-left-name':'PC PORTABLE','extra-left-ip':'192.168.1.25','extra-right-role':'SERVICE / IMPRESSION','extra-right-name':'IMPRIMANTE','extra-right-ip':'10.20.0.60 : 9100'};
+    for (const [id,text] of Object.entries(extra)) document.getElementById(id).textContent=text;
+    if (reverse) {
+      document.getElementById('explanation').textContent=data.explanation+' Un second forward distant, sur le port 9100, permet au portable de joindre l’imprimante locale 192.168.1.60:9100.';
+      document.getElementById('server-ip').textContent='ssh.example.net · :9000 / :9100';
+    } else if (mode==='D') {
+      document.getElementById('explanation').textContent=data.explanation+' Le portable utilise également SOCKS pour demander une connexion TCP à l’imprimante 10.20.0.60:9100 ; aucun listener SSH dédié au port 9100 n’est nécessaire.';
+    }
+    document.getElementById('chain').innerHTML='Scanner → Serveur SSH → Client SSH → Poste source<br>'+(reverse?'Portable → Serveur SSH → Client SSH → Imprimante':'Portable → Client SSH → Serveur SSH → Imprimante');
+    document.getElementById('left-role').textContent='RÉCEPTION / NUMÉRISATION';
+    document.getElementById('right-role').textContent='ÉMISSION / NUMÉRISATION';
+    if (mode==='D') document.getElementById('explanation').textContent+=' Les documents numérisés circulent du scanner vers le poste sur la connexion SOCKS ouverte par celui-ci.';
+    document.getElementById('listener').textContent=data.listener+' Les connexions TCP restent bidirectionnelles ; les particules colorées indiquent le sens des documents.';
     const packets=document.getElementById('packets'); packets.replaceChildren();
     // Chaque segment est animé séparément pour matérialiser les frontières.
     // Les chemins centraux suivent la courbure du conduit, les autres le réseau.
-    const segments=[['M174 349L432 328','M432 328L174 349'],['M464 316C605 319 752 286 877 263','M877 263C752 286 605 319 464 316'],['M926 270L1195 318','M1195 318L926 270']];
+    const segments=[
+      ['M174 389L432 328','M432 328L174 389'],
+      ['M464 316C605 319 752 286 877 263','M877 263C752 286 605 319 464 316'],
+      ['M926 270L1195 390','M1195 390L926 270'],
+      ['M174 170C290 170 330 290 432 328','M432 328C330 290 290 170 174 170'],
+      ['M464 326C605 329 752 296 877 273','M877 273C752 296 605 329 464 326'],
+      ['M926 270C1040 270 1090 175 1195 170','M1195 170C1090 175 1040 270 926 270']
+    ];
     for (const [index,paths] of segments.entries()) for(let i=0;i<5;i++) for(const returning of [false,true]) {
-      const backwards=reverse!==returning;
+      // Le flux principal du scanner va toujours vers le poste à gauche.
+      // En -L/-D, il représente les données reçues sur la connexion ouverte par le poste.
+      const backwards=index < 3 ? !returning : reverse!==returning;
       const packet=svgElement('circle',{r:returning?1.7:2.8,class:returning?'return-packet':'packet',...(returning?{transform:'translate(0 11)'}:{})});
-      const motion=svgElement('animateMotion',{path:paths[backwards?1:0],dur:index===1?'3.6s':'2.7s',begin:`${-i*.74-index*.2}s`,repeatCount:'indefinite',calcMode:'paced'});
+      if (index >= 3 && !returning) packet.style.fill='#f0c481';
+      const motion=svgElement('animateMotion',{path:paths[backwards?1:0],dur:index%3===1?'3.6s':'2.7s',begin:`${-i*.74-index*.2}s`,repeatCount:'indefinite',calcMode:'paced'});
       packet.append(motion); packets.append(packet);
     }
     updatePause();
