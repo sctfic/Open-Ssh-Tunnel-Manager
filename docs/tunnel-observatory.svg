@@ -1,35 +1,147 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 500" role="img" aria-labelledby="title desc">
-  <title id="title">OSTM : trajet d'une redirection SSH locale</title>
-  <desc id="desc">Un paquet part d'un poste source, rejoint le client SSH, traverse un tunnel chiffré jusqu'au serveur SSH, puis atteint le service distant en clair. Les réponses suivent le trajet inverse.</desc>
-  <defs>
-    <linearGradient id="bg" x2="0" y2="1"><stop stop-color="#0c1b25"/><stop offset="1" stop-color="#050a10"/></linearGradient>
-    <linearGradient id="secure" x2="0" y2="1"><stop stop-color="#a995ff" stop-opacity=".22"/><stop offset=".5" stop-color="#8f7af0" stop-opacity=".035"/><stop offset="1" stop-color="#a995ff" stop-opacity=".22"/></linearGradient>
-    <filter id="glow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-    <pattern id="grid" width="42" height="28" patternUnits="userSpaceOnUse" patternTransform="skewX(-29)"><path d="M42 0H0V28" fill="none" stroke="#61adbb" stroke-opacity=".12" stroke-width=".7"/></pattern>
-    <g id="server"><path d="m-43-76 68 20v85l-68-20Z" fill="#0b1923" stroke="#56808e"/><path d="m25-56 15-9v85L25 29Z" fill="#08121b" stroke="#345765"/><path d="m-43-76 15-9 68 20-15 9Z" fill="#17313b" stroke="#6893a0"/><g fill="none" stroke="#75cfd0"><path d="m-34-58 47 14v19l-47-14Z m0 30 47 14v19l-47-14Z"/><path d="m-28-52 24 7m-24 24 24 7"/></g><circle cx="8" cy="-49" r="2" fill="#65eddf" filter="url(#glow)"/><circle cx="8" cy="-19" r="2" fill="#65eddf" filter="url(#glow)"/></g>
-    <g id="client"><path d="m-46-62 75 22v52l-75-22Z" fill="#0d202a" stroke="#65eddf"/><path d="m29-40 11-7v52l-11 7Z" fill="#09131d" stroke="#477887"/><path d="m-46-62 11-7 75 22-11 7Z" fill="#16333d" stroke="#6fc8cb"/><path d="m-34-48 9 8-9 4m17 4 20 6" fill="none" stroke="#65eddf" stroke-width="2"/><path d="M-7 13v19m-23 5 25-11 23 8-25 11Z" fill="#0d1e28" stroke="#508190"/></g>
-    <g id="terminal"><path d="m-46-62 77 22v51l-77-22Z" fill="#0d202a" stroke="#65eddf"/><path d="m31-40 10-6v51l-10 6Z" fill="#09131d" stroke="#477887"/><path d="m-46-62 10-6 77 22-10 6Z" fill="#16333d" stroke="#6fc8cb"/><path d="m-34-48 9 8-9 4m17 4 20 6" fill="none" stroke="#65eddf" stroke-width="2"/></g>
-  </defs>
-  <rect width="1200" height="500" fill="url(#bg)"/>
-  <path d="M20 130 350 79 1180 140v300L20 440Z" fill="url(#grid)"/>
-  <path d="M25 35h22M25 35v22M1175 35h-22m22 0v22M25 465h22m-22 0v-22m1150 22h-22m22 0v-22" fill="none" stroke="#65eddf" stroke-width="2"/>
-  <text x="48" y="58" fill="#65eddf" font-family="monospace" font-size="11" letter-spacing="3">OSTM / NETWORK OBSERVATORY</text>
-  <text x="1152" y="58" text-anchor="end" fill="#6f8c99" font-family="monospace" font-size="10" letter-spacing="2">01 — LOCAL FORWARD / -L</text>
-  <!-- Les surfaces externes restent visibles comme segments réseau en clair. -->
-  <path d="M166 284 367 266M831 226 1034 263" fill="none" stroke="#65eddf" stroke-width="2" stroke-dasharray="4 8" opacity=".65"/>
-  <!-- Le prisme relie précisément le client SSH au serveur SSH. -->
-  <path d="M407 245 811 194v102l-404 56Z" fill="url(#secure)" stroke="#9a89e3" stroke-opacity=".7"/>
-  <path d="M407 245 811 194M407 347 811 296" fill="none" stroke="#c2b5ff" stroke-opacity=".62"/>
-  <ellipse cx="407" cy="296" rx="13" ry="51" fill="#a995ff14" stroke="#c2b5ff"/><ellipse cx="811" cy="245" rx="13" ry="51" fill="#a995ff14" stroke="#c2b5ff"/>
-  <g transform="translate(610 168)" font-family="monospace"><path d="m0 0 10-6 10 6v12l-10 6L0 12Z" fill="#17132b" stroke="#b6a4ff"/><path d="M6 6V3a4 4 0 0 1 8 0v3M5 6h11v7H5Z" fill="none" stroke="#e1dcff"/><text x="31" y="3" fill="#e1dcff" font-size="12" letter-spacing="2">SSH TRANSPORT</text><text x="31" y="20" fill="#a99bda" font-size="9" letter-spacing="1.4">CHIFFRÉ · COMPRESSÉ · LIMITÉ</text></g>
-  <text x="287" y="233" fill="#65eddf" font-family="monospace" font-size="10" letter-spacing="1">EN CLAIR</text><text x="924" y="221" fill="#65eddf" font-family="monospace" font-size="10" letter-spacing="1">EN CLAIR</text>
-  <g transform="translate(165 284)"><path d="M-80 34 0 4 87 31 0 63Z" fill="#0b202b" stroke="#315968"/><use href="#terminal"/></g>
-  <g transform="translate(395 297)"><path d="m-70 35 68-31 84 29-68 33Z" fill="#0b202b" stroke="#315968"/><use href="#client"/></g>
-  <g transform="translate(825 245)"><path d="m-70 35-2-31 84 29-68 33Z" fill="#0b202b" stroke="#315968"/><use href="#server"/></g>
-  <g transform="translate(1048 264)"><path d="M-80 34 0 4 87 31 0 63Z" fill="#0b202b" stroke="#315968"/><use href="#server"/></g>
-  <g text-anchor="middle" font-family="monospace"><text x="165" y="384" fill="#6f9aaa" font-size="9" letter-spacing="1.5">01 / SOURCE</text><text x="165" y="405" fill="#deedf2" font-size="13">POSTE AMONT</text><text x="165" y="424" fill="#829ca8" font-size="10">192.168.1.24</text><text x="395" y="384" fill="#6f9aaa" font-size="9" letter-spacing="1.5">02 / ENTRÉE DU TUNNEL</text><text x="395" y="405" fill="#deedf2" font-size="13">CLIENT SSH</text><text x="395" y="424" fill="#829ca8" font-size="10">0.0.0.0:8080</text><text x="825" y="332" fill="#6f9aaa" font-size="9" letter-spacing="1.5">03 / SORTIE DU TUNNEL</text><text x="825" y="353" fill="#deedf2" font-size="13">SERVEUR SSH</text><text x="825" y="372" fill="#829ca8" font-size="10">ssh.example.net:22</text><text x="1048" y="370" fill="#6f9aaa" font-size="9" letter-spacing="1.5">04 / DESTINATION</text><text x="1048" y="391" fill="#deedf2" font-size="13">SERVICE FINAL</text><text x="1048" y="410" fill="#829ca8" font-size="10">10.20.0.50:80</text></g>
-  <text x="48" y="468" fill="#72909d" font-family="monospace" font-size="9" letter-spacing="1.3">REQUÊTE → → →     /     ← ← ← RÉPONSE · LES LIENS EXTERNES NE SONT PAS PROTÉGÉS PAR SSH</text>
-  <!-- Paquets animés montrent le parcours de la requête et de sa réponse. -->
-  <circle r="3" fill="#72fff0" filter="url(#glow)"><animateMotion dur="4s" repeatCount="indefinite" path="M165 284L395 297C530 289 690 267 825 245L1048 264"/></circle>
-  <circle r="2" fill="#e2dfff"><animateMotion dur="4s" begin="-2s" repeatCount="indefinite" path="M1048 275L825 256C690 278 530 300 395 308L165 295"/></circle>
-</svg>
+<!-- Scène issue de svg.html, mode -L. Styles et géométrie repris à l’identique.
+     Grille, anneaux et particules matérialisés pour une image SVG autonome. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="570" class="scene" id="scene" viewBox="0 0 1400 570" role="img" aria-labelledby="scene-title scene-desc">
+        <title id="scene-title">Redirection locale SSH, du poste source au service distant</title>
+        <desc id="scene-desc">Quatre machines en perspective. Les segments externes sont en clair au niveau SSH. Seul le segment entre client et serveur SSH est chiffré, compressé et limité. Les réponses empruntent le chemin inverse.</desc>
+        <style>
+    .scene text { font-family:ui-monospace,"Cascadia Code",monospace; }
+    .floor { stroke:#50778c; stroke-width:.7; opacity:.16; fill:none; }
+    .node-face { fill:#0c1a26; stroke:#487084; stroke-width:1; }
+    .node-top { fill:#132f3b; stroke:#638a9a; stroke-width:1; }
+    .node-side { fill:#09131f; stroke:#32556a; stroke-width:1; }
+    .node-wire { fill:none; stroke:#77c5d3; stroke-width:1.2; }
+    .beam { stroke:#65eddf; fill:none; }
+    .plain { stroke:#65eddf; stroke-width:2; stroke-dasharray:5 6; fill:none; opacity:.65; }
+    .encrypted { stroke:#a99afa; stroke-width:2; fill:none; opacity:.9; }
+    .label { fill:#dceaf0; font-size:14px; letter-spacing:1px; }
+    .caption { fill:#7797a9; font-size:10px; }
+    .micro { fill:#8faab7; font-size:9px; letter-spacing:1.5px; }
+    .flow-label { fill:#65eddf; font-size:10px; }
+    .packet { fill:#65eddf; filter:url(#glow); }
+    .return-packet { fill:#d9e7f0; opacity:.65; }
+
+    @media (prefers-reduced-motion: reduce) { #packets { display: none; } }
+  </style>
+        <defs>
+          <filter id="glow" x="-150%" y="-150%" width="400%" height="400%"><feGaussianBlur stdDeviation="3"/><feComposite in="SourceGraphic" operator="over"/></filter>
+          <linearGradient id="tube" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#b6a1ff" stop-opacity=".18"/><stop offset=".5" stop-color="#8576ff" stop-opacity=".025"/><stop offset="1" stop-color="#8e70ee" stop-opacity=".2"/></linearGradient>
+          <linearGradient id="projection" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#69eade" stop-opacity="0"/><stop offset="1" stop-color="#69eade" stop-opacity=".1"/></linearGradient>
+          <radialGradient id="halo"><stop stop-color="#6de4db" stop-opacity=".14"/><stop offset="1" stop-color="#6de4db" stop-opacity="0"/></radialGradient>
+          <!-- Les quatre nœuds partagent ces volumes ; les labels restent hors
+               des transformations pour préserver une typographie très lisible. -->
+          <g id="platform"><ellipse cx="0" cy="24" rx="110" ry="44" fill="url(#halo)"/><path d="m-82 12 64-34 101 34-64 37Z" fill="#0b202b" stroke="#2b5363"/><path d="m-82 12 64-34 101 34-64 37Z" transform="translate(0 7)" fill="none" stroke="#1d394b"/><path d="m-70 13 53-27 88 27-53 29Z" fill="none" stroke="#63d8d6" opacity=".3"/><path d="M-68-80-80 13 19 48 69 15 53-80Z" fill="url(#projection)"/></g>
+          <g id="rack"><path class="node-side" d="m18-96 34-18v96L18 0Z"/><path class="node-face" d="m-44-116 62 20V0l-62-20Z"/><path class="node-top" d="m-44-116 34-18 62 20-34 18Z"/><g class="node-wire"><path d="m-35-94 44 14v18l-44-14Z m0 33 44 14v18l-44-14Z"/><path d="m-30-86 22 7m-22 26 22 7"/><path d="m25-88 19-10m-19 21 19-10m-19 21 19-10m-19 21 19-10" opacity=".45"/></g><circle cx="1" cy="-71" r="2" fill="#7af2d7" filter="url(#glow)"/><circle cx="1" cy="-38" r="2" fill="#b39fff" filter="url(#glow)"/><path d="m-30-24 27 9" stroke="#82d5d9"/></g>
+          <g id="desktop"><path class="node-face" d="m-49-104 82 25v58l-82-25Z"/><path class="node-side" d="m33-79 10-6v58l-10 6Z"/><path class="node-top" d="m-49-104 10-6 82 25-10 6Z"/><path d="m-40-91 62 19v36l-62-19Z" fill="#10343d" stroke="#488796"/><path d="m-30-74 10 10-10 4m19 2 18 6" stroke="#73e8df" fill="none" stroke-width="2"/><path d="M-7-33v21m-23 3 25-11 23 8-25 11Z" class="node-wire"/></g>
+        </defs>
+<defs>
+          <radialGradient id="scene-background" cx="52%" cy="35%" r="75%"><stop stop-color="#102631"/><stop offset="1" stop-color="#050a10"/></radialGradient>
+          <linearGradient id="scene-overlay" x2="1" y2="1"><stop stop-color="#0c1923" stop-opacity=".66"/><stop offset="1" stop-color="#070e17" stop-opacity=".85"/></linearGradient>
+        </defs>
+        <rect width="1400" height="570" fill="url(#scene-background)"/>
+        <rect width="1400" height="570" fill="url(#scene-overlay)"/>
+        <rect x=".5" y=".5" width="1399" height="569" fill="none" stroke="#29424f"/>
+        <!-- Le plan de sol oblique donne de la profondeur sans rendre les textes
+             dépendants d'une caméra WebGL ou d'un moteur 3D. -->
+        <g class="floor" id="grid">
+          <path d="M-300 510L240 205"/>
+          <path d="M-180 510L294 205"/>
+          <path d="M-60 510L348 205"/>
+          <path d="M60 510L402 205"/>
+          <path d="M180 510L456 205"/>
+          <path d="M300 510L510 205"/>
+          <path d="M420 510L564 205"/>
+          <path d="M540 510L618 205"/>
+          <path d="M660 510L672 205"/>
+          <path d="M780 510L726 205"/>
+          <path d="M900 510L780 205"/>
+          <path d="M1020 510L834 205"/>
+          <path d="M1140 510L888 205"/>
+          <path d="M1260 510L942 205"/>
+          <path d="M1380 510L996 205"/>
+          <path d="M1500 510L1050 205"/>
+          <path d="M1620 510L1104 205"/>
+          <path d="M1740 510L1158 205"/>
+          <path d="M40 220L1370 300"/>
+          <path d="M40 251L1370 323"/>
+          <path d="M40 282L1370 346"/>
+          <path d="M40 313L1370 369"/>
+          <path d="M40 344L1370 392"/>
+          <path d="M40 375L1370 415"/>
+          <path d="M40 406L1370 438"/>
+          <path d="M40 437L1370 461"/>
+          <path d="M40 468L1370 484"/>
+          <path d="M40 499L1370 507"/>
+        </g>
+        <path d="M44 414 316 274 1348 420" fill="none" stroke="#315363" opacity=".25"/>
+        <text x="42" y="42" class="micro">PROJECTION 03 / PLAN RÉSEAU</text><text x="1358" y="42" text-anchor="end" class="micro">DÉMONSTRATION · DONNÉES ILLUSTRATIVES</text>
+        <g fill="none" stroke="#466d7b" opacity=".65"><path d="M46 82V67h15m1278 0h15v15M46 477v15h15m1278 0h15v-15"/></g>
+        <!-- Seules les extrémités SSH bornent l'enveloppe de protection. -->
+        <g id="conduit">
+          <path d="M459 283C580 287 750 256 884 227L884 313C750 342 580 373 459 369Z" fill="url(#tube)" stroke="#9a89e3" stroke-opacity=".35"/>
+          <path d="M459 290C580 294 750 263 884 234M459 362C580 366 750 335 884 306" fill="none" stroke="#b3a0ff" stroke-opacity=".48"/>
+          <g id="rings" fill="none" stroke="#a597f5">
+            <ellipse cx="491.692308" cy="321.692308" rx="17" ry="43" opacity="0.12"/>
+            <ellipse cx="524.384615" cy="317.384615" rx="17" ry="43" opacity="0.12"/>
+            <ellipse cx="557.076923" cy="313.076923" rx="17" ry="43" opacity="0.32"/>
+            <ellipse cx="589.769231" cy="308.769231" rx="17" ry="43" opacity="0.12"/>
+            <ellipse cx="622.461538" cy="304.461538" rx="17" ry="43" opacity="0.12"/>
+            <ellipse cx="655.153846" cy="300.153846" rx="17" ry="43" opacity="0.32"/>
+            <ellipse cx="687.846154" cy="295.846154" rx="17" ry="43" opacity="0.12"/>
+            <ellipse cx="720.538462" cy="291.538462" rx="17" ry="43" opacity="0.12"/>
+            <ellipse cx="753.230769" cy="287.230769" rx="17" ry="43" opacity="0.32"/>
+            <ellipse cx="785.923077" cy="282.923077" rx="17" ry="43" opacity="0.12"/>
+            <ellipse cx="818.615385" cy="278.615385" rx="17" ry="43" opacity="0.12"/>
+            <ellipse cx="851.307692" cy="274.307692" rx="17" ry="43" opacity="0.32"/>
+          </g>
+          <ellipse cx="459" cy="326" rx="17" ry="43" fill="#8477eb14" stroke="#baaaff"/><ellipse cx="884" cy="270" rx="17" ry="43" fill="#8477eb14" stroke="#baaaff"/>
+        </g>
+        <path d="M174 349 432 328" class="plain"/><path d="M926 270 1195 318" class="plain"/>
+        <path d="M464 316C605 319 752 286 877 263" class="encrypted"/><path d="M464 337C605 340 752 307 877 284" class="encrypted" opacity=".35"/>
+        <!-- Mode -L de svg.html : requêtes cyan vers la droite, réponses vers la gauche.
+             Les animations SMIL fonctionnent sans script dans une balise image. -->
+        <g id="packets">
+          <circle r="2.8" class="packet"><animateMotion path="M174 349L432 328" dur="2.7s" begin="0.00s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="1.7" class="return-packet" transform="translate(0 11)"><animateMotion path="M432 328L174 349" dur="2.7s" begin="0.00s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="2.8" class="packet"><animateMotion path="M174 349L432 328" dur="2.7s" begin="-0.74s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="1.7" class="return-packet" transform="translate(0 11)"><animateMotion path="M432 328L174 349" dur="2.7s" begin="-0.74s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="2.8" class="packet"><animateMotion path="M174 349L432 328" dur="2.7s" begin="-1.48s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="1.7" class="return-packet" transform="translate(0 11)"><animateMotion path="M432 328L174 349" dur="2.7s" begin="-1.48s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="2.8" class="packet"><animateMotion path="M174 349L432 328" dur="2.7s" begin="-2.22s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="1.7" class="return-packet" transform="translate(0 11)"><animateMotion path="M432 328L174 349" dur="2.7s" begin="-2.22s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="2.8" class="packet"><animateMotion path="M174 349L432 328" dur="2.7s" begin="-2.96s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="1.7" class="return-packet" transform="translate(0 11)"><animateMotion path="M432 328L174 349" dur="2.7s" begin="-2.96s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="2.8" class="packet"><animateMotion path="M464 316C605 319 752 286 877 263" dur="3.6s" begin="-0.20s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="1.7" class="return-packet" transform="translate(0 11)"><animateMotion path="M877 263C752 286 605 319 464 316" dur="3.6s" begin="-0.20s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="2.8" class="packet"><animateMotion path="M464 316C605 319 752 286 877 263" dur="3.6s" begin="-0.94s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="1.7" class="return-packet" transform="translate(0 11)"><animateMotion path="M877 263C752 286 605 319 464 316" dur="3.6s" begin="-0.94s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="2.8" class="packet"><animateMotion path="M464 316C605 319 752 286 877 263" dur="3.6s" begin="-1.68s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="1.7" class="return-packet" transform="translate(0 11)"><animateMotion path="M877 263C752 286 605 319 464 316" dur="3.6s" begin="-1.68s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="2.8" class="packet"><animateMotion path="M464 316C605 319 752 286 877 263" dur="3.6s" begin="-2.42s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="1.7" class="return-packet" transform="translate(0 11)"><animateMotion path="M877 263C752 286 605 319 464 316" dur="3.6s" begin="-2.42s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="2.8" class="packet"><animateMotion path="M464 316C605 319 752 286 877 263" dur="3.6s" begin="-3.16s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="1.7" class="return-packet" transform="translate(0 11)"><animateMotion path="M877 263C752 286 605 319 464 316" dur="3.6s" begin="-3.16s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="2.8" class="packet"><animateMotion path="M926 270L1195 318" dur="2.7s" begin="-0.40s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="1.7" class="return-packet" transform="translate(0 11)"><animateMotion path="M1195 318L926 270" dur="2.7s" begin="-0.40s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="2.8" class="packet"><animateMotion path="M926 270L1195 318" dur="2.7s" begin="-1.14s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="1.7" class="return-packet" transform="translate(0 11)"><animateMotion path="M1195 318L926 270" dur="2.7s" begin="-1.14s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="2.8" class="packet"><animateMotion path="M926 270L1195 318" dur="2.7s" begin="-1.88s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="1.7" class="return-packet" transform="translate(0 11)"><animateMotion path="M1195 318L926 270" dur="2.7s" begin="-1.88s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="2.8" class="packet"><animateMotion path="M926 270L1195 318" dur="2.7s" begin="-2.62s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="1.7" class="return-packet" transform="translate(0 11)"><animateMotion path="M1195 318L926 270" dur="2.7s" begin="-2.62s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="2.8" class="packet"><animateMotion path="M926 270L1195 318" dur="2.7s" begin="-3.36s" repeatCount="indefinite" calcMode="paced"/></circle>
+          <circle r="1.7" class="return-packet" transform="translate(0 11)"><animateMotion path="M1195 318L926 270" dur="2.7s" begin="-3.36s" repeatCount="indefinite" calcMode="paced"/></circle>
+        </g>
+        <g transform="translate(164 349)"><use href="#platform"/><use href="#desktop"/></g>
+        <g transform="translate(446 328)"><use href="#platform"/><use href="#rack"/></g>
+        <g transform="translate(905 270)"><use href="#platform"/><use href="#rack"/></g>
+        <g transform="translate(1220 323)"><use href="#platform"/><use href="#desktop"/></g>
+        <g text-anchor="middle">
+          <text x="164" y="419" class="micro" id="left-role">01 / ORIGINE</text><text x="164" y="442" class="label" id="left-name">POSTE SOURCE</text><text x="164" y="463" class="caption" id="left-ip">192.168.1.24</text>
+          <text x="446" y="399" class="micro">FRONTIÈRE SSH / CLIENT</text><text x="446" y="422" class="label">CLIENT SSH · OSTM</text><text x="446" y="443" class="caption" id="client-ip">192.168.1.10 : 8080</text>
+          <text x="905" y="348" class="micro">FRONTIÈRE SSH / SERVEUR</text><text x="905" y="371" class="label">SERVEUR SSH</text><text x="905" y="392" class="caption" id="server-ip">ssh.example.net : 22</text>
+          <text x="1220" y="393" class="micro" id="right-role">04 / DESTINATION</text><text x="1220" y="416" class="label" id="right-name">SERVICE FINAL</text><text x="1220" y="437" class="caption" id="right-ip">10.20.0.50 : 80</text>
+        </g>
+        <g transform="translate(620 113)"><path d="m0 0 11-6 11 6v12l-11 7L0 12Z" fill="#9b85ff12" stroke="#b3a0ff"/><path d="M7 6V3a4 4 0 0 1 8 0v3M6 6h10v7H6Z" fill="none" stroke="#e0d9ff"/><text x="35" y="3" fill="#dddaff" font-size="13" letter-spacing="2">TRANSPORT SSH</text><text x="35" y="22" class="micro">CHIFFRÉ · COMPRESSÉ · LIMITÉ</text><path d="M95 36v60" stroke="#8576b6" stroke-dasharray="2 4"/><circle cx="95" cy="100" r="3" fill="#b3a0ff"/></g>
+        <g text-anchor="middle"><text x="290" y="287" class="flow-label" id="left-flow">EN CLAIR →</text><text x="1066" y="233" class="flow-label" id="right-flow">EN CLAIR →</text><text x="690" y="388" fill="#c8baff" font-size="10" id="direction">REQUÊTE →   /   ← RÉPONSE</text></g>
+        <text x="42" y="539" class="micro">LES LIENS EXTERNES NE SONT PAS PROTÉGÉS PAR SSH</text><text x="1358" y="539" text-anchor="end" class="micro">TCP BIDIRECTIONNEL / UNE SESSION SSH</text>
+      </svg>
