@@ -4,6 +4,16 @@ Backend Node.js : API authentifiée, droits cumulés par tunnel, redirections SS
 `-L`, `-R` et SOCKS5 (`-D`), reconnexion, clés et événements SSE en temps réel.
 Frontend sombre en HTML, CSS et JavaScript natifs, servi sans compilation.
 
+## Visualisation du transport SSH
+
+[![Visualisation isométrique d'un port forward SSH local](docs/tunnel-observatory.svg)](svg.html)
+
+L'illustration montre le chemin complet d'une redirection `-L` : le trafic
+circule en clair entre les équipements et les deux extrémités SSH, puis il est
+chiffré, compressé et limité pendant son passage dans le tunnel. Les réponses
+empruntent le même chemin en sens inverse. [Ouvrir la visualisation interactive
+des modes `-L`, `-R` et SOCKS](svg.html).
+
 - [API et exemples](docs/backend-api.md)
 - [Installation Linux, Nginx et PM2](docs/deployment.md)
 - [Décisions fonctionnelles](docs/rebuild-decisions.md)
