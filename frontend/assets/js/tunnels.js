@@ -31,6 +31,15 @@ export function cardHtml(tunnel, open, checks = {}) {
         <span class="status status--${esc(tunnel.status)}"><span></span>${esc(labels[tunnel.status] || tunnel.status)}</span>
         <span class="tunnel-title"><strong>${esc(tunnel.id)} <small class="limits">↙ ${rate(c.bandwidth.down)} · ↗ ${rate(c.bandwidth.up)}</small></strong></span>
       </button>
+      <div class="tunnel-rate-bars" title="Débit instantané (↙ Download à gauche | ↗ Upload à droite)" aria-label="Jauges de débit">
+        <div class="rate-bar-track rate-bar-track--down" title="Download (↙)">
+          <div class="rate-bar-fill rate-bar-fill--down" data-bar-down style="width: 0%;"></div>
+        </div>
+        <div class="rate-bar-divider"></div>
+        <div class="rate-bar-track rate-bar-track--up" title="Upload (↗)">
+          <div class="rate-bar-fill rate-bar-fill--up" data-bar-up style="width: 0%;"></div>
+        </div>
+      </div>
       <div class="compact-actions">
         ${tunnel.level >= 2 ? button('start', 'Démarrer', 'data-action="start"', tunnel.desired === 'running') + button('stop', 'Arrêter', 'data-action="stop"', tunnel.desired === 'stopped') + button('restart', 'Redémarrer', 'data-action="restart"') : ''}
         ${tunnel.level >= 3 ? button('add', 'Ajouter un channel', 'data-add-channel') : ''}
@@ -40,7 +49,14 @@ export function cardHtml(tunnel, open, checks = {}) {
     <div class="tunnel-body" ${open ? '' : 'hidden'}>
       ${tunnel.error ? `<p class="error-box">${esc(tunnel.error)}</p>` : ''}
       <div class="channels">${channelsHtml(c.tunnels, checks)}</div>
-      <footer class="tunnel-footer"><code>${esc(c.user)}@${esc(c.ip)}:${c.ssh_port}</code><span class="live-rates">↙ <b data-down>${Number(tunnel.metrics?.downKoPerSecond || 0).toFixed(1)}</b> · ↗ <b data-up>${Number(tunnel.metrics?.upKoPerSecond || 0).toFixed(1)}</b> Ko/s</span></footer>
+      <div class="tunnel-chart-wrapper">
+        <div class="tunnel-chart-header">
+          <span class="tunnel-chart-title">Débit temps réel (60 s)</span>
+          <span class="live-rates">↙ <b data-down>${Number(tunnel.metrics?.downKoPerSecond || 0).toFixed(1)}</b> · ↗ <b data-up>${Number(tunnel.metrics?.upKoPerSecond || 0).toFixed(1)}</b> Ko/s</span>
+        </div>
+        <div class="tunnel-chart-mount" data-chart-mount="${esc(tunnel.id)}"></div>
+      </div>
+      <footer class="tunnel-footer"><code>${esc(c.user)}@${esc(c.ip)}:${c.ssh_port}</code></footer>
     </div>
   </article>`;
 }

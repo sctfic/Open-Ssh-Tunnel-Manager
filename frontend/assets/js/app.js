@@ -1,10 +1,17 @@
 import { Api } from './api.js';
 import { cardHtml, channelsHtml, bandwidthDialog, channelDialog, channelContextMenu, icon, filterTunnels } from './tunnels.js';
 import { appRoot, escapeHtml, formData, identifierPattern, openDialog, plural, qs, qsa, toast } from './ui.js';
+import { TunnelRateChart } from './chart.js';
+
+function ratePercentage(rateKo, limitKo) {
+  if (limitKo > 0) return Math.min(100, Math.max(0, (rateKo / limitKo) * 100));
+  if (rateKo <= 0) return 0;
+  return Math.min(100, Math.max(4, (Math.log10(rateKo + 1) / 4) * 100));
+}
 
 // L'état reste volontairement petit et sérialisable. Les vues lisent ce même objet,
 // ce qui rend le chemin des données facile à suivre pour un nouveau développeur.
-const state = { me: null, tunnels: [], filter: '', stream: null, page: 'tunnels', openTunnels: new Set(), checks: {}, pendingChecks: new Set() };
+const state = { me: null, tunnels: [], filter: '', stream: null, page: 'tunnels', openTunnels: new Set(), checks: {}, pendingChecks: new Set(), charts: new Map() };
 const levels = ['Aucun', 'Lecture', 'Exécution', 'Écriture', 'Gestion'];
 const api = new Api(() => showLogin('Votre session a expiré.'));
 let bulkPending = false;
@@ -81,7 +88,13 @@ function renderTunnelPage() {
   const visible = filterTunnels(state.tunnels, state.filter);
   qsa('[data-bulk-action]').forEach(button => { button.disabled = bulkPending || !visible.some(t => t.level >= 2); });
   const list = qs('#tunnel-list');
-  for (const card of qsa('.tunnel-card', list)) if (!visible.some(t => t.id === card.dataset.id)) card.remove();
+  for (const card of qsa('.tunnel-card', list)) {
+    if (!visible.some(t => t.id === card.dataset.id)) {
+      state.charts.get(card.dataset.id)?.destroy();
+      state.charts.delete(card.dataset.id);
+      card.remove();
+    }
+  }
   qs('.empty', list)?.remove();
   for (const tunnel of visible) {
     let card = qsa('.tunnel-card', list).find(node => node.dataset.id === tunnel.id);
@@ -91,12 +104,37 @@ function renderTunnelPage() {
       const template = document.createElement('template');
       template.innerHTML = cardHtml(tunnel, state.openTunnels.has(tunnel.id), state.checks[tunnel.id]);
       const replacement = template.content.firstElementChild; replacement.dataset.signature = signature;
-      if (card) card.replaceWith(replacement); else list.append(replacement);
+      if (card) {
+        state.charts.get(tunnel.id)?.destroy();
+        state.charts.delete(tunnel.id);
+        card.replaceWith(replacement);
+      } else list.append(replacement);
       bindCard(replacement, tunnel);
       card = replacement;
     }
-    qs('[data-up]', card).textContent = Number(tunnel.metrics?.upKoPerSecond || 0).toFixed(1);
-    qs('[data-down]', card).textContent = Number(tunnel.metrics?.downKoPerSecond || 0).toFixed(1);
+    const upVal = Number(tunnel.metrics?.upKoPerSecond || 0);
+    const downVal = Number(tunnel.metrics?.downKoPerSecond || 0);
+    const elUp = qs('[data-up]', card); if (elUp) elUp.textContent = upVal.toFixed(1);
+    const elDown = qs('[data-down]', card); if (elDown) elDown.textContent = downVal.toFixed(1);
+
+    const barDown = qs('[data-bar-down]', card);
+    if (barDown) barDown.style.width = `${ratePercentage(downVal, tunnel.config.bandwidth.down)}%`;
+    const barUp = qs('[data-bar-up]', card);
+    if (barUp) barUp.style.width = `${ratePercentage(upVal, tunnel.config.bandwidth.up)}%`;
+    const rateBars = qs('.tunnel-rate-bars', card);
+    if (rateBars) {
+      rateBars.title = `Débit instantané :\n↙ Download : ${downVal.toFixed(1)} Ko/s\n↗ Upload : ${upVal.toFixed(1)} Ko/s`;
+    }
+
+    const mount = qs('[data-chart-mount]', card);
+    if (mount && state.openTunnels.has(tunnel.id)) {
+      let chart = state.charts.get(tunnel.id);
+      if (!chart || chart.container !== mount) {
+        chart = new TunnelRateChart(mount);
+        state.charts.set(tunnel.id, chart);
+      }
+      chart.push(upVal, downVal);
+    }
   }
   if (!visible.length) list.innerHTML = '<div class="empty">Aucun tunnel trouvé.</div>';
 }
@@ -108,7 +146,18 @@ function bindCard(card, tunnel) {
     qs('[data-expand]', card).setAttribute('aria-expanded', String(open));
     qs('[data-expand]', card).setAttribute('aria-label', `${open ? 'Replier' : 'Déplier'} ${tunnel.id}`);
     qs('.tunnel-body', card).hidden = !open;
-    if (open) checkTunnel(tunnel);
+    if (open) {
+      checkTunnel(tunnel);
+      const mount = qs('[data-chart-mount]', card);
+      if (mount) {
+        let chart = state.charts.get(tunnel.id);
+        if (!chart || chart.container !== mount) {
+          chart = new TunnelRateChart(mount);
+          state.charts.set(tunnel.id, chart);
+        }
+        chart.push(Number(tunnel.metrics?.upKoPerSecond || 0), Number(tunnel.metrics?.downKoPerSecond || 0));
+      }
+    }
   });
   qsa('[data-action]', card).forEach(button => button.addEventListener('click', () => runAction(tunnel, button.dataset.action)));
   qs('[data-menu]', card)?.addEventListener('click', event => {
