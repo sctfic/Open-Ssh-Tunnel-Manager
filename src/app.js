@@ -9,6 +9,7 @@ import { LinuxTransport, DirectTransport } from './network/transport.js';
 import { tunnel, id, userInput, password, bandwidth, channelInput, requireThat } from './schema.js';
 import { provision, onboard, OnboardingError } from './ssh.js';
 import { diagnose, localPortAvailable } from './diagnostics.js';
+import { testLimit } from './limit-test.js';
 
 /**
  * Construit l'application sans ouvrir de port TCP. Cette séparation permet aux
@@ -256,6 +257,25 @@ export async function buildApp({ dataDir = process.env.OSTM_DATA_DIR || 'data', 
   }));
   // Regrouper les demandes simultanées évite de multiplier les pings quand
   // plusieurs utilisateurs ouvrent la même fiche. Aucune mutation du tunnel.
+  // Ne pas retenir la file des mutations pendant un transfert : stop reste disponible.
+  const limitTests = new Set();
+  app.post('/api/v2/tunnels/:id/limit-test', async (request, reply) => {
+    const key = await access(request, 2);
+    const { direction } = z.object({ direction: z.enum(['up', 'down']) }).strict().parse(request.body);
+    const state = manager.state(key);
+    requireThat(state.status === 'running' && state.session, 409, 'Démarrez le tunnel avant le test.');
+    requireThat(!limitTests.has(key), 409, 'Un test est déjà en cours sur ce tunnel.');
+    limitTests.add(key);
+    const controller = new AbortController();
+    const cancel = () => controller.abort();
+    reply.raw.on('close', cancel);
+    try {
+      const config = await store.get(key);
+      await audit(request, 'tunnel.limit-test', { tunnel: key, direction });
+      const result = await testLimit(state.session, state.transport, direction, controller.signal, 6000, config.bandwidth[direction]);
+      return { ...result, limitKoPerSecond: config.bandwidth[direction] };
+    } finally { reply.raw.off('close', cancel); limitTests.delete(key); }
+  });
   const diagnostics = new Map();
   app.post('/api/v2/tunnels/:id/diagnostics', async request => {
     const key = await access(request, 1);

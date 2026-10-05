@@ -1,3 +1,5 @@
+import { testLimit } from '../src/limit-test.js';
+import { randomBytes } from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import net from 'node:net';
@@ -58,7 +60,23 @@ async function fixture(t, options = {}) {
         } else reject?.();
       });
       client.on('session', accept => {
-        const session = accept(); session.on('exec', (acceptExec, rejectExec, info) => { installCommand = info.command; const stream = acceptExec(); stream.on('data', data => { installed += data; }); stream.on('end', () => { stream.exit(options.rejectInstall ? 1 : 0); stream.end(); }); });
+        const session = accept(); session.on('exec', (acceptExec, rejectExec, info) => {
+          // Le banc répond réellement dans le channel SSH du transfert de test.
+          if (info.command.startsWith('if timeout ')) {
+            if (options.rejectTest) return rejectExec();
+            const stream = acceptExec(); stream.on('error', () => {});
+            if (info.command.includes('wc -c')) {
+              let bytes = 0; stream.on('data', b => { bytes += b.length; });
+              stream.on('end', () => { stream.write(String(bytes)); stream.exit(0); stream.end(); });
+            } else {
+              const timer = setInterval(() => stream.write(randomBytes(4096)), 10);
+              stream.on('close', () => clearInterval(timer));
+              client.once('close', () => clearInterval(timer));
+              stream.on('end', () => { clearInterval(timer); stream.exit(0); stream.end(); });
+            }
+            return;
+          }
+          installCommand = info.command; const stream = acceptExec(); stream.on('data', data => { installed += data; }); stream.on('end', () => { stream.exit(options.rejectInstall ? 1 : 0); stream.end(); }); });
       });
     });
   });
@@ -197,4 +215,29 @@ test('SSH handshake and channels work across the subprocess transport bridge', {
   const session = new SshSession(config, transport, () => {});
   try { await session.start(); assert.equal((await exchange(port, 'relayed')).toString(), 'relayed'); }
   finally { await session.close(); }
+});
+
+// Une commande temporaire ne doit pas fermer la session partagée des forwards.
+test('limit test measures both directions on the existing SSH transport and supports cancellation', async t => {
+  const { config } = await fixture(t);
+  const transport = await new DirectTransport().open('limit', config);
+  const session = new SshSession(config, transport, () => {});
+  t.after(() => session.close()); await session.start();
+  for (const direction of ['up', 'down']) {
+    const result = await testLimit(session, transport, direction, undefined, 1300, 100);
+    assert.ok(result.networkKoPerSecond > 0); assert.ok(result.receivedBytes > 0);
+    assert.equal(session.closed, false);
+  }
+  const controller = new AbortController();
+  const pending = testLimit(session, transport, 'down', controller.signal);
+  setTimeout(() => controller.abort(), 50);
+  await assert.rejects(pending, /annulé/);
+  assert.equal(session.closed, false);
+});
+test('limit test explains servers that reject command execution', async t => {
+  const { config } = await fixture(t, { rejectTest: true });
+  const transport = await new DirectTransport().open('limit', config);
+  const session = new SshSession(config, transport, () => {});
+  t.after(() => session.close()); await session.start();
+  await assert.rejects(testLimit(session, transport, 'up'), /non autorisée/);
 });

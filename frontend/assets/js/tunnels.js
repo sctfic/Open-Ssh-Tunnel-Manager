@@ -5,6 +5,8 @@ const paths = {
   start: '<path d="m8 5 11 7-11 7Z"/>', stop: '<rect x="6" y="6" width="12" height="12" rx="1"/>',
   restart: '<path d="M20 7v5h-5M19 12a7 7 0 1 0-2 5M20 7l-3 3"/>',
   add: '<path d="M12 5v14M5 12h14"/>', menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  pending: '<path d="M6 12h12"/>',
+  warning: '<path d="m12 3 10 18H2Z"/><path d="M12 9v5M12 17h.01"/>',
   check: '<path d="m5 12 4 4L19 6"/>',
   settings: '<path d="m9 3-.5 3-2 1-2.5-1-2 3 2 2v2l-2 2 2 3 2.5-1 2 1 .5 3h6l.5-3 2-1 2.5 1 2-3-2-2v-2l2-2-2-3-2.5 1-2-1L15 3Z"/><circle cx="12" cy="12" r="3"/>',
   lock: '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/>'
@@ -43,20 +45,13 @@ export function cardHtml(tunnel, open, checks = {}) {
       <div class="compact-actions">
         ${tunnel.level >= 2 ? button('start', 'Démarrer', 'data-action="start"', tunnel.desired === 'running') + button('stop', 'Arrêter', 'data-action="stop"', tunnel.desired === 'stopped') + button('restart', 'Redémarrer', 'data-action="restart"') : ''}
         ${tunnel.level >= 3 ? button('add', 'Ajouter un channel', 'data-add-channel') : ''}
-        ${tunnel.level >= 3 ? `<div class="tunnel-menu">${button('menu', 'Menu du tunnel', 'data-menu aria-expanded="false"')}<div class="menu-items" hidden><button data-bandwidth>Débit</button>${tunnel.level >= 4 ? '<button data-rights>Déléguer</button><button data-delete>Supprimer</button>' : ''}</div></div>` : ''}
+        ${tunnel.level >= 3 ? `<div class="tunnel-menu">${button('menu', 'Menu du tunnel', 'data-menu aria-expanded="false"')}<div class="menu-items" hidden>${tunnel.level >= 3 ? '<button data-bandwidth>Débit</button>' : ''}${tunnel.level >= 4 ? '<button data-rights>Déléguer</button><button data-delete>Supprimer</button>' : ''}</div></div>` : ''}
       </div>
     </div>
     <div class="tunnel-body" ${open ? '' : 'hidden'}>
       ${tunnel.error ? `<p class="error-box">${esc(tunnel.error)}</p>` : ''}
       <div class="channels">${channelsHtml(c.tunnels, checks)}</div>
-      <div class="tunnel-chart-wrapper">
-        <div class="tunnel-chart-header">
-          <span class="tunnel-chart-title">Débit temps réel (60 s)</span>
-          <span class="live-rates">↙ <b data-down>${Number(tunnel.metrics?.downKoPerSecond || 0).toFixed(1)}</b> · ↗ <b data-up>${Number(tunnel.metrics?.upKoPerSecond || 0).toFixed(1)}</b> Ko/s</span>
-        </div>
-        <div class="tunnel-chart-mount" data-chart-mount="${esc(tunnel.id)}"></div>
-      </div>
-      <footer class="tunnel-footer"><code>${esc(c.user)}@${esc(c.ip)}:${c.ssh_port}</code></footer>
+      <footer class="tunnel-footer"><code>${esc(c.user)}@${esc(c.ip)}:${c.ssh_port}</code><div class="footer-metrics"><div class="tunnel-chart-mount" data-chart-mount="${esc(tunnel.id)}" aria-label="Historique du débit à 3 pixels par seconde"></div><span class="live-rates"><span class="rate-up">↗ <b data-up>${Number(tunnel.metrics?.upKoPerSecond || 0).toFixed(1)}</b> Ko/s</span><span class="rate-down">↙ <b data-down>${Number(tunnel.metrics?.downKoPerSecond || 0).toFixed(1)}</b> Ko/s</span></span></div></footer>
     </div>
   </article>`;
 }
@@ -75,11 +70,11 @@ export function channelsHtml(groups, checks = {}) {
       const timeout = check[`${kind}Error`] === 'timeout' ? ' · délai dépassé (600 ms)' : '';
       const unavailable = kind === 'icmp' && check.icmpError === 'ping-unavailable' ? ' · outil ping indisponible' : '';
       const description = esc(`${label} : ${status}${timing}${timeout}${unavailable}`);
-      return `<span class="probe probe--${kind} ${ok ? 'probe--ok' : ''}" title="${description}" aria-label="${description}">${icon('check')}</span>`;
+      return `<span class="probe probe--${kind} ${ok ? 'probe--ok' : ''}" title="${description}" aria-label="${description}">${icon(ok ? 'check' : check[`${kind}Error`] ? 'warning' : 'pending')}</span>`;
     };
     const arrow = type === '-R' ? '←' : type === '-D' ? '⇢' : '→';
     const endpoint = type === '-D' ? null : address(c.endpoint_host, c.endpoint_port);
-    return `<div class="channel-flow" data-channel-type="${type}" data-channel-port="${port}" data-channel-name="${esc(c.name)}"><strong>${esc(c.name)}</strong><span class="channel-route"><code class="channel-local">${esc(local)}</code><span class="flow-arrow" title="${type}" aria-label="Redirection ${type}">${arrow}</span><code class="channel-remote">${esc(remote)}</code></span><span class="probe-pair">${badge('tcp', endpoint ? `TCP vers le port final ${endpoint}` : 'TCP sans destination fixe')}${badge('icmp', 'ICMP direct depuis le backend')}</span></div>`;
+    return `<div class="channel-flow" data-channel-type="${type}" data-channel-port="${port}" data-channel-name="${esc(c.name)}"><span class="probe-pair">${badge('tcp', endpoint ? `TCP vers le port final ${endpoint}` : 'TCP sans destination fixe')}${badge('icmp', 'ICMP direct depuis le backend')}</span><strong>${esc(c.name)}</strong><span class="channel-route"><code class="channel-local">${esc(local)}</code><span class="flow-arrow" title="${type}" aria-label="Redirection ${type}">${arrow}</span><code class="channel-remote">${esc(remote)}</code></span></div>`;
   })).join('') || '<p class="muted">Aucun channel. Utilisez + pour en ajouter un.</p>';
 }
 
@@ -87,19 +82,34 @@ export function channelsHtml(groups, checks = {}) {
 export const sliderRate = value => Number(value) === 1001 ? 0 : Math.round(10 ** (Number(value) / 250));
 export const rateSlider = value => value === 0 ? 1001 : Math.log10(Math.max(1, Math.min(10000, value))) * 250;
 
-export function bandwidthDialog(tunnel, save) {
+export function bandwidthDialog(tunnel, save, test) {
   const wrap = document.createElement('div');
-  wrap.innerHTML = `<form class="stack"><p class="muted">De 1 Ko/s à 10 000 Ko/s (10 Mo/s), puis un dernier cran Illimité.</p>${['down', 'up'].map(dir => `<label>${dir === 'down' ? '↙ Download' : '↗ Upload'} <output data-output="${dir}"></output><input name="${dir}" type="range" min="0" max="1001" step="1" value="${rateSlider(tunnel.config.bandwidth[dir])}"></label>`).join('')}<button class="button button--primary" type="submit">Enregistrer</button><p class="form-error" role="alert"></p></form>`;
-  const dialog = openDialog(`Débit · ${tunnel.id}`, wrap);
-  const form = qs('form', wrap);
+  wrap.innerHTML = `<div class="stack"><p class="muted">De 1 Ko/s à 10 000 Ko/s (10 Mo/s), puis Illimité. Fermez pour enregistrer ; Échap annule.</p>${['down', 'up'].map(dir => `<label>${dir === 'down' ? '↙ Download' : '↗ Upload'} <output data-output="${dir}"></output><input name="${dir}" type="range" min="0" max="1001" step="1" value="${rateSlider(tunnel.config.bandwidth[dir])}"></label>`).join('')}<button class="button button--primary" data-test ${tunnel.status === 'running' ? '' : 'disabled'}>Tester</button><p class="muted">Le test enregistre ces limites puis mesure l’Upload et le Download. Le tunnel doit être actif.</p><p class="form-error" role="alert"></p></div>`;
+  const values = () => Object.fromEntries(['up', 'down'].map(dir => [dir, sliderRate(qs(`[name="${dir}"]`, wrap).value)]));
+  let saving = false;
+  const persist = async reason => {
+    if (reason === 'escape') return true;
+    if (saving) return false;
+    saving = true;
+    qs('[data-test]', wrap).disabled = true;
+    qs('.form-error', wrap).textContent = '';
+    try {
+      const body = values();
+      if (['up', 'down'].some(dir => body[dir] !== tunnel.config.bandwidth[dir])) await save(body);
+      return true;
+    } catch (error) { qs('.form-error', wrap).textContent = error.message; return false; }
+    finally { saving = false; qs('[data-test]', wrap).disabled = tunnel.status !== 'running'; }
+  };
+  const dialog = openDialog(`Débit · ${tunnel.id}`, wrap, { beforeClose: persist });
   const update = () => ['up', 'down'].forEach(dir => {
-    const value = sliderRate(form.elements[dir].value);
-    qs(`[data-output="${dir}"]`, form).textContent = value === 0 ? 'Illimité' : `${value} Ko/s`;
+    const value = values()[dir];
+    qs(`[data-output="${dir}"]`, wrap).textContent = value === 0 ? 'Illimité' : `${value} Ko/s`;
   });
-  form.addEventListener('input', update); update();
-  submit(form, async () => {
-    await save(Object.fromEntries(['up', 'down'].map(dir => [dir, sliderRate(form.elements[dir].value)])));
-    dialog.close();
+  wrap.addEventListener('input', update); update();
+  qs('[data-test]', wrap).addEventListener('click', async () => {
+    // Tester ferme la configuration comme une validation ordinaire : la mesure
+    // utilise donc les valeurs choisies, et la modale suivante affiche le résultat.
+    if (await persist('test')) { dialog.close(); await test(); }
   });
 }
 

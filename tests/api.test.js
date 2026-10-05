@@ -201,3 +201,10 @@ test('live SSE filters tunnels, applies revocation and closes after logout', { t
     let done = false; while (!done) ({ done } = await stream.read()); assert.equal(done, true);
   } finally { controller.abort(); await stream.cancel().catch(() => {}); }
 });
+
+test('limit test requires execute permission and a running tunnel', async t => {
+  const { call } = await fixture(t);
+  assert.equal((await call(null, 'POST', '/tunnels/alpha/limit-test', { direction: 'up' })).statusCode, 401);
+  assert.equal((await call('reader', 'POST', '/tunnels/alpha/limit-test', { direction: 'up' })).statusCode, 403);
+  assert.equal((await call('executor', 'POST', '/tunnels/alpha/limit-test', { direction: 'up' })).statusCode, 409);
+});

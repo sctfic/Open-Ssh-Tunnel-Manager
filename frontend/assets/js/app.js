@@ -130,7 +130,7 @@ function renderTunnelPage() {
     if (mount && state.openTunnels.has(tunnel.id)) {
       let chart = state.charts.get(tunnel.id);
       if (!chart || chart.container !== mount) {
-        chart = new TunnelRateChart(mount);
+        chart = new TunnelRateChart(mount, 60, tunnel.config.bandwidth);
         state.charts.set(tunnel.id, chart);
       }
       chart.push(upVal, downVal);
@@ -152,7 +152,7 @@ function bindCard(card, tunnel) {
       if (mount) {
         let chart = state.charts.get(tunnel.id);
         if (!chart || chart.container !== mount) {
-          chart = new TunnelRateChart(mount);
+          chart = new TunnelRateChart(mount, 60, tunnel.config.bandwidth);
           state.charts.set(tunnel.id, chart);
         }
         chart.push(Number(tunnel.metrics?.upKoPerSecond || 0), Number(tunnel.metrics?.downKoPerSecond || 0));
@@ -229,7 +229,7 @@ function showBandwidth(tunnel) {
   bandwidthDialog(tunnel, async body => {
     await api.request('/tunnels/' + encodeURIComponent(tunnel.id) + '/bandwidth', { method: 'PUT', body });
     await refreshTunnels(); renderTunnelPage();
-  });
+  }, () => runLimitTest(tunnel));
 }
 
 async function showRights(tunnel) {
@@ -324,3 +324,34 @@ document.addEventListener('pointerdown', event => {
   });
 });
 boot();
+
+// Le test part directement : seule la restitution des résultats ouvre une modale.
+const pendingLimitTests = new Set();
+async function runLimitTest(tunnel) {
+  if (pendingLimitTests.has(tunnel.id)) { toast('Un test est déjà en cours sur ce tunnel.'); return; }
+  pendingLimitTests.add(tunnel.id);
+  const results = [];
+  let failure = '';
+  toast(`${tunnel.id} : test Upload puis Download en cours…`);
+  try {
+    for (const direction of ['up', 'down']) {
+      results.push(await api.request(`/tunnels/${encodeURIComponent(tunnel.id)}/limit-test`, { method: 'POST', body: { direction } }));
+    }
+  } catch (error) { failure = error.message; }
+  finally { pendingLimitTests.delete(tunnel.id); }
+  const wrap = document.createElement('div'); wrap.className = 'stack';
+  for (const result of results) {
+    const line = document.createElement('p');
+    line.textContent = `${result.direction === 'up' ? '↗ Upload' : '↙ Download'} : ${result.networkKoPerSecond.toFixed(1)} Ko/s · limite ${result.limitKoPerSecond ? result.limitKoPerSecond + ' Ko/s' : 'illimitée'} · ${result.limitKoPerSecond ? (result.networkKoPerSecond / result.limitKoPerSecond * 100).toFixed(1) + ' %' : 'pourcentage non applicable'}`;
+    const percentage = result.limitKoPerSecond ? result.networkKoPerSecond / result.limitKoPerSecond * 100 : null;
+    if (percentage !== null && percentage >= 96 && percentage <= 104) {
+      const check = document.createElement('span'); check.className = 'limit-test-ok';
+      check.innerHTML = icon('check'); check.title = 'Débit entre 96 % et 104 % de la limite';
+      check.setAttribute('aria-label', check.title); line.append(check);
+    }
+    wrap.append(line);
+  }
+  if (failure) { const error = document.createElement('p'); error.className = 'form-error'; error.textContent = failure; wrap.append(error); }
+  const note = document.createElement('p'); note.className = 'muted'; note.textContent = 'La mesure réseau inclut tous les channels du tunnel. Un débit inférieur au plafond peut aussi venir du réseau ou du processeur.'; wrap.append(note);
+  openDialog(`Résultat du test · ${tunnel.id}`, wrap);
+}

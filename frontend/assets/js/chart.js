@@ -1,20 +1,22 @@
 /**
- * Graphique D3.js miroir de débit réseau sur 60 secondes.
+ * Graphique D3.js miroir : largeur disponible, à raison de 3 pixels/seconde.
  * Courbe au-dessus de 0 : Upload (↗)
  * Courbe en-dessous de 0 : Download (↙)
  */
 
 export class TunnelRateChart {
-  constructor(container, maxSamples = 60) {
+  constructor(container, maxSamples = 60, limits = { up: 0, down: 0 }) {
     this.container = container;
+    this.limits = limits;
     this.maxSamples = maxSamples;
-    this.history = Array.from({ length: maxSamples }, (_, i) => ({
-      time: i - maxSamples + 1,
-      up: 0,
-      down: 0
-    }));
+    this.history = [{ at: performance.now(), time: 0, up: 0, down: 0 }];
     this.mounted = false;
     this.init();
+    // Le footer peut changer de largeur sans nouveau débit (redimensionnement).
+    this.observer = new ResizeObserver(() => {
+      if (Math.round(this.container.clientWidth) !== this.width) this.init();
+    });
+    this.observer.observe(container);
   }
 
   init() {
@@ -22,9 +24,11 @@ export class TunnelRateChart {
     if (!d3 || !this.container) return;
 
     this.container.innerHTML = '';
-    this.width = 460;
-    this.height = 100;
-    this.margin = { top: 14, right: 14, bottom: 18, left: 48 };
+    this.width = Math.max(34, Math.round(this.container.clientWidth));
+    this.height = 60;
+    this.margin = { top: 3, right: 3, bottom: 10, left: 30 };
+    this.period = (this.width - this.margin.left - this.margin.right) / 3;
+    this.container.setAttribute('aria-label', `Historique sur ${Math.round(this.period)} secondes, 3 pixels par seconde`);
 
     this.svg = d3.select(this.container)
       .append('svg')
@@ -54,7 +58,7 @@ export class TunnelRateChart {
 
     // Échelles
     this.x = d3.scaleLinear()
-      .domain([-this.maxSamples + 1, 0])
+      .domain([-this.period, 0])
       .range([this.margin.left, this.width - this.margin.right]);
 
     this.y = d3.scaleLinear()
@@ -62,7 +66,7 @@ export class TunnelRateChart {
 
     // Lignes verticales de grille (-45s, -30s, -15s)
     this.gridGroup = this.svg.append('g').attr('class', 'chart-grid');
-    [-45, -30, -15].forEach(t => {
+    [-.75, -.5, -.25].map(fraction => Math.round(fraction * this.period)).forEach(t => {
       this.gridGroup.append('line')
         .attr('x1', this.x(t))
         .attr('x2', this.x(t))
@@ -110,13 +114,13 @@ export class TunnelRateChart {
 
     // Points lumineux d'extrémité (valeur instantanée à t=0)
     this.dotUp = this.svg.append('circle')
-      .attr('r', 3)
+      .attr('r', 1.5)
       .attr('fill', '#ffffff')
       .attr('stroke', '#7a8cff')
       .attr('stroke-width', 2);
 
     this.dotDown = this.svg.append('circle')
-      .attr('r', 3)
+      .attr('r', 1.5)
       .attr('fill', '#ffffff')
       .attr('stroke', '#56d9c3')
       .attr('stroke-width', 2);
@@ -150,15 +154,11 @@ export class TunnelRateChart {
   }
 
   push(upKo, downKo) {
-    this.history.shift();
-    this.history.push({
-      time: 0,
-      up: Math.max(0, Number(upKo) || 0),
-      down: Math.max(0, Number(downKo) || 0)
-    });
-    for (let i = 0; i < this.maxSamples; i++) {
-      this.history[i].time = i - this.maxSamples + 1;
-    }
+    const now = performance.now();
+    this.history.push({ at: now, time: 0, up: Math.max(0, Number(upKo) || 0), down: Math.max(0, Number(downKo) || 0) });
+    // Les positions utilisent le temps réel, même si les événements SSE arrivent irrégulièrement.
+    this.history = this.history.filter(sample => now - sample.at <= this.period * 1000);
+    for (const sample of this.history) sample.time = (sample.at - now) / 1000;
     if (this.mounted) {
       this.render();
     }
@@ -168,17 +168,20 @@ export class TunnelRateChart {
     const d3 = window.d3;
     if (!d3 || !this.mounted) return;
 
-    const maxObserved = d3.max(this.history, d => Math.max(d.up, d.down)) || 0;
-    const maxScale = Math.max(10, Math.ceil(maxObserved * 1.15));
-    this.y.domain([-maxScale, maxScale]);
+    // Chaque moitié utilise sa propre limite ; illimité adapte son échelle
+    // à l'historique. Le zéro reste central même si Up et Down diffèrent.
+    const upScale = this.limits.up || Math.max(10, Math.ceil(d3.max(this.history, d => d.up) * 1.15));
+    const downScale = this.limits.down || Math.max(10, Math.ceil(d3.max(this.history, d => d.down) * 1.15));
+    this.y.domain([-downScale, 0, upScale])
+      .range([this.height - this.margin.bottom, (this.margin.top + this.height - this.margin.bottom) / 2, this.margin.top]).clamp(true);
 
     const zeroY = this.y(0);
     this.zeroLine.attr('y1', zeroY).attr('y2', zeroY);
     this.labelZero.attr('y', zeroY + 3);
 
     const fmtRate = val => val >= 1000 ? `${(val / 1000).toFixed(1)}M` : `${Math.round(val)}K`;
-    this.labelUp.text(`+${fmtRate(maxScale)}`);
-    this.labelDown.text(`-${fmtRate(maxScale)}`);
+    this.labelUp.text(`+${fmtRate(upScale)}`);
+    this.labelDown.text(`-${fmtRate(downScale)}`);
 
     const areaUp = d3.area()
       .curve(d3.curveMonotoneX)
@@ -222,6 +225,7 @@ export class TunnelRateChart {
 
   destroy() {
     this.mounted = false;
+    this.observer?.disconnect();
     if (this.container) {
       this.container.innerHTML = '';
     }
